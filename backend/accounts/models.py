@@ -3,12 +3,6 @@ from django.db import models
 
 
 class User(AbstractUser):
-
-    class Role(models.TextChoices):
-        CUSTOMER = "CUSTOMER", "Customer"
-        DRIVER = "DRIVER", "Driver"
-        ADMIN = "ADMIN", "Admin"
-
     class AccountStatus(models.TextChoices):
         ACTIVE = "ACTIVE", "Active"
         SUSPENDED = "SUSPENDED", "Suspended"
@@ -17,16 +11,11 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=15, unique=True)
 
-    role = models.CharField(
-        max_length=20,
-        choices=Role.choices,
-        default=Role.CUSTOMER
-    )
+    is_customer = models.BooleanField(default=True)
+    is_driver = models.BooleanField(default=False)
 
     account_status = models.CharField(
-        max_length=20,
-        choices=AccountStatus.choices,
-        default=AccountStatus.ACTIVE
+        max_length=20, choices=AccountStatus.choices, default=AccountStatus.ACTIVE
     )
 
     is_verified = models.BooleanField(default=False)
