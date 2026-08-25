@@ -1,5 +1,4 @@
 
-
 # Movana — Requirements & System Design
 
 > **Version:** 0.1  
@@ -564,6 +563,7 @@ Deployment	TBD
 Keeping these as TBD prevents development assumptions from accidentally becoming final business requirements.
 
 19. Roadmap
+
 Phase 1 — Foundation
  Project setup
  Git workflow
@@ -573,6 +573,7 @@ Phase 1 — Foundation
  Driver profile
  Vehicle system
  Vehicle category seed
+
 Phase 2 — Core Booking
  Booking model
  Pickup/destination
@@ -585,6 +586,7 @@ Phase 2 — Core Booking
  OTP verification
  Ride start
  Ride completion
+
 Phase 3 — Transaction
  Final fare
  Payment
@@ -592,18 +594,21 @@ Phase 3 — Transaction
  Driver earnings
  Cancellation
  Refunds
+
 Phase 4 — Experience
  Live location
  Notifications
  Customer ↔ driver chat
  Platform calling
  Ratings
+
 Phase 5 — Operations
  Driver documents
  Vehicle documents
  Verification workflows
  Disputes
  Admin controls
+
 Phase 6 — Expansion
  Scheduled rides
  Airport transfers
@@ -611,6 +616,7 @@ Phase 6 — Expansion
  Corporate travel
  Multi-city
  Advanced analytics
+ 
 Final Principle
 
 Build the core ride lifecycle first. Add complexity only when the business flow requires it.
