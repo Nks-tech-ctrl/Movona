@@ -1,6 +1,9 @@
 from django.urls import path
 
-from .views import FareEstimateAPIView
+from .views import (
+    BookingCreateAPIView,
+    FareEstimateAPIView
+)
 
 
 urlpatterns = [
@@ -8,5 +11,10 @@ urlpatterns = [
         "estimate/",
         FareEstimateAPIView.as_view(),
         name="fare-estimate",
+    ),
+    path(
+        "book/",
+        BookingCreateAPIView.as_view(),
+        name="booking-create",
     ),
 ]

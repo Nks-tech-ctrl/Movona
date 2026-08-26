@@ -24,6 +24,8 @@ from .services import (
     mark_driver_arriving,
     verify_ride_otp,
 )
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 
 class BookingServiceTests(TestCase):
@@ -466,3 +468,117 @@ class RideLifecycleTests(RideTestBase):
                 Booking.CancelledBy.CUSTOMER,
                 "Trying to cancel completed ride",
             )
+class RideAPITests(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="testcustomer",
+            email="api@test.com",
+            phone="7777777777",
+            is_customer=True,
+        )
+
+        self.customer = CustomerProfile.objects.create(
+            user=self.user
+        )
+
+        self.category = VehicleCategory.objects.create(
+            name="API Mini",
+            description="API test category",
+            passenger_capacity=4,
+            base_fare=Decimal("50.00"),
+            per_km_rate=Decimal("10.00"),
+            per_minute_rate=Decimal("2.00"),
+            is_active=True,
+        )
+
+    def test_fare_estimate_api(self):
+        response = self.client.post(
+            "/api/rides/estimate/",
+            {
+                "category": "API Mini",
+                "distance_km": "8.00",
+                "duration_minutes": 20,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(
+            response.data["category"],
+            "API Mini",
+        )
+
+        self.assertEqual(
+            response.data["estimated_fare"],
+            Decimal("170.00"),
+        )
+
+    def test_booking_create_api(self):
+        response = self.client.post(
+            "/api/rides/book/",
+            {
+                "category": "API Mini",
+                "pickup_address": "Test Pickup",
+                "pickup_latitude": "28.6315000",
+                "pickup_longitude": "77.2167000",
+                "destination_address": "Test Destination",
+                "destination_latitude": "28.6129000",
+                "destination_longitude": "77.2295000",
+                "distance_km": "8.00",
+                "duration_minutes": 20,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        self.assertEqual(
+            response.data["status"],
+            Booking.Status.REQUESTED,
+        )
+
+        self.assertEqual(
+            response.data["category"],
+            "API Mini",
+        )
+
+        self.assertEqual(
+            response.data["estimated_fare"],
+            Decimal("170.00"),
+        )
+
+        self.assertTrue(
+            Booking.objects.filter(
+                id=response.data["id"]
+            ).exists()
+        )
+
+    def test_invalid_category_is_rejected(self):
+        response = self.client.post(
+            "/api/rides/book/",
+            {
+                "category": "DoesNotExist",
+                "pickup_address": "Test Pickup",
+                "pickup_latitude": "28.6315000",
+                "pickup_longitude": "77.2167000",
+                "destination_address": "Test Destination",
+                "destination_latitude": "28.6129000",
+                "destination_longitude": "77.2295000",
+                "distance_km": "8.00",
+                "duration_minutes": 20,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
