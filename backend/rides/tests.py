@@ -471,15 +471,27 @@ class RideLifecycleTests(RideTestBase):
 class RideAPITests(APITestCase):
 
     def setUp(self):
+        self.password = "CustomerPass123!"
         self.user = User.objects.create_user(
             username="testcustomer",
             email="api@test.com",
             phone="7777777777",
+            password=self.password,
             is_customer=True,
         )
-
         self.customer = CustomerProfile.objects.create(
             user=self.user
+        )
+
+        self.user_b = User.objects.create_user(
+            username="customertwo",
+            email="api2@test.com",
+            phone="7777777778",
+            password=self.password,
+            is_customer=True,
+        )
+        self.customer_b = CustomerProfile.objects.create(
+            user=self.user_b
         )
 
         self.category = VehicleCategory.objects.create(
@@ -492,7 +504,33 @@ class RideAPITests(APITestCase):
             is_active=True,
         )
 
+        # Authenticate test customer
+        login_response = self.client.post(
+            "/api/auth/token/",
+            {
+                "username": "testcustomer",
+                "password": self.password,
+            },
+            format="json",
+        )
+        self.access_token = login_response.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+
+        self.valid_booking_data = {
+            "category": "API Mini",
+            "pickup_address": "Test Pickup",
+            "pickup_latitude": "28.6315000",
+            "pickup_longitude": "77.2167000",
+            "destination_address": "Test Destination",
+            "destination_latitude": "28.6129000",
+            "destination_longitude": "77.2295000",
+            "distance_km": "8.00",
+            "duration_minutes": 20,
+        }
+
     def test_fare_estimate_api(self):
+        # Clear auth credentials to verify estimate endpoint is accessible publicly
+        self.client.credentials()
         response = self.client.post(
             "/api/rides/estimate/",
             {
@@ -507,31 +545,19 @@ class RideAPITests(APITestCase):
             response.status_code,
             status.HTTP_200_OK,
         )
-
         self.assertEqual(
             response.data["category"],
             "API Mini",
         )
-
         self.assertEqual(
-            response.data["estimated_fare"],
+            Decimal(str(response.data["estimated_fare"])),
             Decimal("170.00"),
         )
 
-    def test_booking_create_api(self):
+    def test_booking_create_api_authenticated_success(self):
         response = self.client.post(
             "/api/rides/book/",
-            {
-                "category": "API Mini",
-                "pickup_address": "Test Pickup",
-                "pickup_latitude": "28.6315000",
-                "pickup_longitude": "77.2167000",
-                "destination_address": "Test Destination",
-                "destination_latitude": "28.6129000",
-                "destination_longitude": "77.2295000",
-                "distance_km": "8.00",
-                "duration_minutes": 20,
-            },
+            self.valid_booking_data,
             format="json",
         )
 
@@ -539,42 +565,91 @@ class RideAPITests(APITestCase):
             response.status_code,
             status.HTTP_201_CREATED,
         )
-
         self.assertEqual(
             response.data["status"],
             Booking.Status.REQUESTED,
         )
-
         self.assertEqual(
             response.data["category"],
             "API Mini",
         )
-
         self.assertEqual(
-            response.data["estimated_fare"],
+            Decimal(str(response.data["estimated_fare"])),
             Decimal("170.00"),
         )
 
-        self.assertTrue(
-            Booking.objects.filter(
-                id=response.data["id"]
-            ).exists()
-        )
+        created_booking = Booking.objects.get(id=response.data["id"])
+        self.assertEqual(created_booking.customer, self.customer)
+        self.assertEqual(created_booking.category, self.category)
+        self.assertEqual(created_booking.status, Booking.Status.REQUESTED)
 
-    def test_invalid_category_is_rejected(self):
+    def test_booking_create_unauthenticated_returns_401(self):
+        self.client.credentials()  # Remove Bearer token
         response = self.client.post(
             "/api/rides/book/",
-            {
-                "category": "DoesNotExist",
-                "pickup_address": "Test Pickup",
-                "pickup_latitude": "28.6315000",
-                "pickup_longitude": "77.2167000",
-                "destination_address": "Test Destination",
-                "destination_latitude": "28.6129000",
-                "destination_longitude": "77.2295000",
-                "distance_km": "8.00",
-                "duration_minutes": 20,
-            },
+            self.valid_booking_data,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_booking_create_non_customer_user_returns_403(self):
+        driver_user = User.objects.create_user(
+            username="justdriver",
+            email="driveronly@test.com",
+            phone="8888800001",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+        )
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "justdriver", "password": self.password},
+            format="json",
+        )
+        driver_token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {driver_token}")
+
+        response = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_booking_create_cannot_specify_another_customer(self):
+        payload_with_spoofed_customer = self.valid_booking_data.copy()
+        payload_with_spoofed_customer["customer"] = self.customer_b.id
+        payload_with_spoofed_customer["customer_id"] = self.customer_b.id
+
+        response = self.client.post(
+            "/api/rides/book/",
+            payload_with_spoofed_customer,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+        created_booking = Booking.objects.get(id=response.data["id"])
+        self.assertEqual(created_booking.customer, self.customer)
+        self.assertNotEqual(created_booking.customer, self.customer_b)
+
+    def test_invalid_category_is_rejected(self):
+        invalid_data = self.valid_booking_data.copy()
+        invalid_data["category"] = "DoesNotExist"
+
+        response = self.client.post(
+            "/api/rides/book/",
+            invalid_data,
             format="json",
         )
 
@@ -582,3 +657,76 @@ class RideAPITests(APITestCase):
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
+
+    def test_inactive_category_is_rejected(self):
+        self.category.is_active = False
+        self.category.save()
+
+        response = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_invalid_distance_is_rejected(self):
+        zero_distance_data = self.valid_booking_data.copy()
+        zero_distance_data["distance_km"] = "0.00"
+
+        response = self.client.post(
+            "/api/rides/book/",
+            zero_distance_data,
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        negative_distance_data = self.valid_booking_data.copy()
+        negative_distance_data["distance_km"] = "-5.00"
+
+        response = self.client.post(
+            "/api/rides/book/",
+            negative_distance_data,
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_invalid_duration_is_rejected(self):
+        zero_duration_data = self.valid_booking_data.copy()
+        zero_duration_data["duration_minutes"] = 0
+
+        response = self.client.post(
+            "/api/rides/book/",
+            zero_duration_data,
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_booking_create_response_does_not_leak_sensitive_fields(self):
+        response = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+        self.assertNotIn("otp_hash", response.data)
+        self.assertNotIn("otp_verified", response.data)
+        self.assertNotIn("password", response.data)
+        self.assertNotIn("password_hash", response.data)
+
