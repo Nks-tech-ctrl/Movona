@@ -13,6 +13,10 @@ urlpatterns = [
         "api/rides/",
         include("rides.urls"),
     ),
+    path(
+        "api/",
+        include("accounts.urls"),
+    ),
 
     path(
         "api/auth/token/",
