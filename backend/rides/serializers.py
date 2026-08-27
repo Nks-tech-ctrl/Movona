@@ -78,6 +78,15 @@ class BookingCreateSerializer(serializers.Serializer):
         return category
 
 
+class BookingCancelSerializer(serializers.Serializer):
+    reason = serializers.CharField(
+        max_length=500,
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
 class BookingResponseSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source="category.name", read_only=True)
     customer_name = serializers.CharField(source="customer.user.username", read_only=True)
@@ -98,7 +107,16 @@ class BookingResponseSerializer(serializers.ModelSerializer):
             "estimated_distance_km",
             "estimated_duration_minutes",
             "estimated_fare",
+            "final_fare",
+            "cancelled_by",
+            "cancellation_reason",
             "requested_at",
+            "accepted_at",
+            "arrived_at",
+            "started_at",
+            "completed_at",
+            "cancelled_at",
             "created_at",
         ]
-        read_only_fields = fields
+        read_only_fields = fields
+

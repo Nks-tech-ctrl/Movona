@@ -4,13 +4,16 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .models import Booking
 from .serializers import (
+    BookingCancelSerializer,
     BookingCreateSerializer,
     BookingResponseSerializer,
     FareEstimateSerializer,
 )
 from .services import (
     calculate_fare,
+    cancel_booking,
     create_booking,
 )
 
@@ -97,4 +100,109 @@ class BookingCreateAPIView(APIView):
         return Response(
             response_serializer.data,
             status=status.HTTP_201_CREATED,
+        )
+
+
+class BookingListAPIView(APIView):
+    """
+    Retrieve all bookings belonging to the authenticated customer.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        customer = getattr(request.user, "customer_profile", None)
+        if customer is None or not getattr(request.user, "is_customer", False):
+            return Response(
+                {"detail": "Only registered customers can access ride bookings."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        bookings = (
+            Booking.objects.filter(customer=customer)
+            .select_related("category", "customer__user")
+            .order_by("-created_at")
+        )
+        serializer = BookingResponseSerializer(bookings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class BookingDetailAPIView(APIView):
+    """
+    Retrieve specific booking belonging to the authenticated customer.
+    Returns 404 if booking does not exist or belongs to another customer.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        customer = getattr(request.user, "customer_profile", None)
+        if customer is None or not getattr(request.user, "is_customer", False):
+            return Response(
+                {"detail": "Only registered customers can access ride bookings."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.select_related("category", "customer__user").get(
+                pk=pk, customer=customer
+            )
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = BookingResponseSerializer(booking)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class BookingCancelAPIView(APIView):
+    """
+    Cancel an existing booking belonging to the authenticated customer.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        customer = getattr(request.user, "customer_profile", None)
+        if customer is None or not getattr(request.user, "is_customer", False):
+            return Response(
+                {"detail": "Only registered customers can cancel ride bookings."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.get(pk=pk, customer=customer)
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = BookingCancelSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = serializer.validated_data["reason"]
+
+        try:
+            cancelled_booking = cancel_booking(
+                booking=booking,
+                cancelled_by=Booking.CancelledBy.CUSTOMER,
+                reason=reason,
+            )
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.message if hasattr(exc, "message") else str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = BookingResponseSerializer(cancelled_booking)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
         )

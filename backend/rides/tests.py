@@ -729,4 +729,335 @@ class RideAPITests(APITestCase):
         self.assertNotIn("otp_verified", response.data)
         self.assertNotIn("password", response.data)
         self.assertNotIn("password_hash", response.data)
+
+    def test_booking_list_authenticated_returns_only_own_bookings(self):
+        # Create 2 bookings for Customer A
+        self.client.post("/api/rides/book/", self.valid_booking_data, format="json")
+        self.client.post("/api/rides/book/", self.valid_booking_data, format="json")
+
+        # Create 1 booking for Customer B
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "customertwo", "password": self.password},
+            format="json",
+        )
+        token_b = login_b.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token_b}")
+        self.client.post("/api/rides/book/", self.valid_booking_data, format="json")
+
+        # Switch back to Customer A and fetch list
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+        response = self.client.get("/api/rides/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        for booking_item in response.data:
+            self.assertEqual(booking_item["customer_name"], "testcustomer")
+
+    def test_booking_list_unauthenticated_returns_401(self):
+        self.client.credentials()  # Clear auth credentials
+        response = self.client.get("/api/rides/")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_booking_list_non_customer_returns_403(self):
+        driver_user = User.objects.create_user(
+            username="driverlist",
+            email="driverlist@test.com",
+            phone="8888800002",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+        )
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "driverlist", "password": self.password},
+            format="json",
+        )
+        driver_token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {driver_token}")
+
+        response = self.client.get("/api/rides/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_booking_detail_authenticated_returns_own_booking(self):
+        create_resp = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_id = create_resp.data["id"]
+
+        response = self.client.get(f"/api/rides/{booking_id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], booking_id)
+        self.assertEqual(response.data["customer_name"], "testcustomer")
+        self.assertEqual(response.data["category"], "API Mini")
+        self.assertNotIn("otp_hash", response.data)
+        self.assertNotIn("password", response.data)
+
+    def test_booking_detail_customer_a_cannot_access_customer_b_booking_returns_404(self):
+        # Create booking as Customer B
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "customertwo", "password": self.password},
+            format="json",
+        )
+        token_b = login_b.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token_b}")
+        create_resp_b = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_b_id = create_resp_b.data["id"]
+
+        # Authenticate as Customer A and attempt to view Customer B's booking
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+        response = self.client.get(f"/api/rides/{booking_b_id}/")
+
+        # Must return 404 to avoid leaking existence of the resource
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_booking_detail_unauthenticated_returns_401(self):
+        create_resp = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_id = create_resp.data["id"]
+
+        self.client.credentials()  # Clear credentials
+        response = self.client.get(f"/api/rides/{booking_id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_booking_detail_nonexistent_booking_returns_404(self):
+        response = self.client.get("/api/rides/999999/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_booking_detail_non_customer_returns_403(self):
+        create_resp = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_id = create_resp.data["id"]
+
+        driver_user = User.objects.create_user(
+            username="driverdetail",
+            email="driverdetail@test.com",
+            phone="8888800003",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+        )
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "driverdetail", "password": self.password},
+            format="json",
+        )
+        driver_token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {driver_token}")
+
+        response = self.client.get(f"/api/rides/{booking_id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_booking_cancel_authenticated_success(self):
+        create_resp = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_id = create_resp.data["id"]
+
+        response = self.client.post(
+            f"/api/rides/{booking_id}/cancel/",
+            {"reason": "Changed my travel schedule"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Booking.Status.CANCELLED)
+        self.assertEqual(response.data["cancelled_by"], Booking.CancelledBy.CUSTOMER)
+        self.assertEqual(
+            response.data["cancellation_reason"], "Changed my travel schedule"
+        )
+
+        # Verify DB state
+        booking = Booking.objects.get(id=booking_id)
+        self.assertEqual(booking.status, Booking.Status.CANCELLED)
+        self.assertEqual(booking.cancelled_by, Booking.CancelledBy.CUSTOMER)
+        self.assertIsNotNone(booking.cancelled_at)
+
+    def test_booking_cancel_customer_a_cannot_cancel_customer_b_booking_returns_404(self):
+        # Create booking as Customer B
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "customertwo", "password": self.password},
+            format="json",
+        )
+        token_b = login_b.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token_b}")
+        create_resp_b = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_b_id = create_resp_b.data["id"]
+
+        # Authenticate as Customer A and attempt to cancel Customer B's booking
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+        response = self.client.post(
+            f"/api/rides/{booking_b_id}/cancel/",
+            {"reason": "Malicious attempt to cancel another user's ride"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Verify Customer B's booking remains REQUESTED
+        booking_b = Booking.objects.get(id=booking_b_id)
+        self.assertEqual(booking_b.status, Booking.Status.REQUESTED)
+
+    def test_booking_cancel_unauthenticated_returns_401(self):
+        create_resp = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_id = create_resp.data["id"]
+
+        self.client.credentials()  # Clear credentials
+        response = self.client.post(
+            f"/api/rides/{booking_id}/cancel/",
+            {"reason": "Cancel without auth"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_booking_cancel_non_customer_returns_403(self):
+        create_resp = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_id = create_resp.data["id"]
+
+        driver_user = User.objects.create_user(
+            username="drivercancel",
+            email="drivercancel@test.com",
+            phone="8888800004",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+        )
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "drivercancel", "password": self.password},
+            format="json",
+        )
+        driver_token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {driver_token}")
+
+        response = self.client.post(
+            f"/api/rides/{booking_id}/cancel/",
+            {"reason": "Driver trying customer cancel"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_booking_cancel_missing_reason_rejected(self):
+        create_resp = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_id = create_resp.data["id"]
+
+        # Missing reason
+        response = self.client.post(
+            f"/api/rides/{booking_id}/cancel/",
+            {},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Blank/whitespace reason
+        response_blank = self.client.post(
+            f"/api/rides/{booking_id}/cancel/",
+            {"reason": "   "},
+            format="json",
+        )
+        self.assertEqual(response_blank.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_booking_cancel_completed_booking_rejected(self):
+        booking = create_booking(
+            customer=self.customer,
+            category=self.category,
+            pickup_address="Pickup",
+            pickup_latitude=Decimal("28.6315"),
+            pickup_longitude=Decimal("77.2167"),
+            destination_address="Destination",
+            destination_latitude=Decimal("28.6129"),
+            destination_longitude=Decimal("77.2295"),
+            distance_km=Decimal("8.00"),
+            duration_minutes=20,
+        )
+        booking.status = Booking.Status.COMPLETED
+        booking.save()
+
+        response = self.client.post(
+            f"/api/rides/{booking.id}/cancel/",
+            {"reason": "Try to cancel completed ride"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_booking_cancel_already_cancelled_booking_rejected(self):
+        booking = create_booking(
+            customer=self.customer,
+            category=self.category,
+            pickup_address="Pickup",
+            pickup_latitude=Decimal("28.6315"),
+            pickup_longitude=Decimal("77.2167"),
+            destination_address="Destination",
+            destination_latitude=Decimal("28.6129"),
+            destination_longitude=Decimal("77.2295"),
+            distance_km=Decimal("8.00"),
+            duration_minutes=20,
+        )
+        booking.status = Booking.Status.CANCELLED
+        booking.save()
+
+        response = self.client.post(
+            f"/api/rides/{booking.id}/cancel/",
+            {"reason": "Try to cancel again"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_booking_cancel_response_does_not_leak_sensitive_fields(self):
+        create_resp = self.client.post(
+            "/api/rides/book/",
+            self.valid_booking_data,
+            format="json",
+        )
+        booking_id = create_resp.data["id"]
+
+        response = self.client.post(
+            f"/api/rides/{booking_id}/cancel/",
+            {"reason": "Legitimate cancellation"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("otp_hash", response.data)
+        self.assertNotIn("password", response.data)
+        self.assertNotIn("password_hash", response.data)
+
 
