@@ -12,13 +12,18 @@ from .serializers import (
     BookingResponseSerializer,
     EligibleRideResponseSerializer,
     FareEstimateSerializer,
+    RideStartSerializer,
 )
 from .services import (
     accept_booking,
     calculate_fare,
     cancel_booking,
+    complete_ride,
     create_booking,
     find_eligible_bookings_for_driver,
+    mark_driver_arrived,
+    mark_driver_arriving,
+    verify_ride_otp,
 )
 
 
@@ -264,6 +269,171 @@ class DriverAcceptRideAPIView(APIView):
             )
 
         response_serializer = BookingResponseSerializer(accepted_booking)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class DriverArrivingAPIView(APIView):
+    """
+    Mark an accepted booking as DRIVER_ARRIVING.
+    Only the assigned driver can update this ride.
+    """
+
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def post(self, request, pk):
+        driver = getattr(request.user, "driver_profile", None)
+        if driver is None or not getattr(request.user, "is_driver", False):
+            return Response(
+                {"detail": "Only registered drivers can update ride status."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.get(pk=pk, driver=driver)
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            updated_booking = mark_driver_arriving(booking)
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.message if hasattr(exc, "message") else str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = BookingResponseSerializer(updated_booking)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class DriverArrivedAPIView(APIView):
+    """
+    Mark a booking as DRIVER_ARRIVED when the driver arrives at pickup.
+    Only the assigned driver can update this ride.
+    """
+
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def post(self, request, pk):
+        driver = getattr(request.user, "driver_profile", None)
+        if driver is None or not getattr(request.user, "is_driver", False):
+            return Response(
+                {"detail": "Only registered drivers can update ride status."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.get(pk=pk, driver=driver)
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            updated_booking = mark_driver_arrived(booking)
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.message if hasattr(exc, "message") else str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = BookingResponseSerializer(updated_booking)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class DriverStartRideAPIView(APIView):
+    """
+    Verify customer OTP and transition booking to STARTED.
+    Only the assigned driver can start the ride.
+    """
+
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def post(self, request, pk):
+        driver = getattr(request.user, "driver_profile", None)
+        if driver is None or not getattr(request.user, "is_driver", False):
+            return Response(
+                {"detail": "Only registered drivers can start a ride."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.get(pk=pk, driver=driver)
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RideStartSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        otp = serializer.validated_data["otp"]
+
+        try:
+            started_booking = verify_ride_otp(booking, otp)
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.message if hasattr(exc, "message") else str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = BookingResponseSerializer(started_booking)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class DriverCompleteRideAPIView(APIView):
+    """
+    Complete a started ride, finalize fare, and free driver availability.
+    Only the assigned driver can complete the ride.
+    """
+
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def post(self, request, pk):
+        driver = getattr(request.user, "driver_profile", None)
+        if driver is None or not getattr(request.user, "is_driver", False):
+            return Response(
+                {"detail": "Only registered drivers can complete a ride."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.get(pk=pk, driver=driver)
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            completed_booking = complete_ride(booking)
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.message if hasattr(exc, "message") else str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = BookingResponseSerializer(completed_booking)
         return Response(
             response_serializer.data,
             status=status.HTTP_200_OK,

@@ -143,4 +143,15 @@ class EligibleRideResponseSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+
+
+
+class RideStartSerializer(serializers.Serializer):
+    otp = serializers.CharField(
+        max_length=6,
+        min_length=4,
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
 

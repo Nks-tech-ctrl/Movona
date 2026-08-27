@@ -2,7 +2,11 @@ from django.urls import path
 
 from rides.views import (
     DriverAcceptRideAPIView,
+    DriverArrivedAPIView,
+    DriverArrivingAPIView,
+    DriverCompleteRideAPIView,
     DriverEligibleRidesAPIView,
+    DriverStartRideAPIView,
 )
 from .views import (
     CustomerProfileAPIView,
@@ -35,5 +39,25 @@ urlpatterns = [
         "drivers/rides/<int:pk>/accept/",
         DriverAcceptRideAPIView.as_view(),
         name="driver-ride-accept",
+    ),
+    path(
+        "drivers/rides/<int:pk>/arriving/",
+        DriverArrivingAPIView.as_view(),
+        name="driver-ride-arriving",
+    ),
+    path(
+        "drivers/rides/<int:pk>/arrived/",
+        DriverArrivedAPIView.as_view(),
+        name="driver-ride-arrived",
+    ),
+    path(
+        "drivers/rides/<int:pk>/start/",
+        DriverStartRideAPIView.as_view(),
+        name="driver-ride-start",
+    ),
+    path(
+        "drivers/rides/<int:pk>/complete/",
+        DriverCompleteRideAPIView.as_view(),
+        name="driver-ride-complete",
     ),
 ]

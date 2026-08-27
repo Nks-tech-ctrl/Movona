@@ -339,16 +339,29 @@ def mark_driver_arrived(booking: Booking) -> Booking:
         raise ValidationError("Driver must be arriving before being marked as arrived.")
 
     booking.status = Booking.Status.DRIVER_ARRIVED
-
     booking.arrived_at = timezone.now()
 
-    booking.save(
-        update_fields=[
-            "status",
-            "arrived_at",
-            "updated_at",
-        ]
-    )
+    if not booking.otp_hash:
+        otp = f"{secrets.randbelow(10000):04d}"
+        booking.otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+        booking.otp_verified = False
+        booking.save(
+            update_fields=[
+                "status",
+                "arrived_at",
+                "otp_hash",
+                "otp_verified",
+                "updated_at",
+            ]
+        )
+    else:
+        booking.save(
+            update_fields=[
+                "status",
+                "arrived_at",
+                "updated_at",
+            ]
+        )
 
     return booking
 
@@ -416,7 +429,7 @@ def verify_ride_otp(booking: Booking, otp: str) -> Booking:
 
 def complete_ride(
     booking: Booking,
-    final_fare: Decimal,
+    final_fare: Decimal = None,
 ) -> Booking:
     """
     Complete a started ride.
@@ -424,6 +437,9 @@ def complete_ride(
 
     if booking.status != Booking.Status.STARTED:
         raise ValidationError("Only started rides can be completed.")
+
+    if final_fare is None:
+        final_fare = booking.estimated_fare
 
     if final_fare < 0:
         raise ValidationError("Final fare cannot be negative.")

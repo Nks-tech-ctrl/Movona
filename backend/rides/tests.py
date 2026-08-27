@@ -1129,6 +1129,32 @@ class DriverRideAPITests(APITestCase):
             is_active=True,
         )
 
+        # Create Driver B for cross-driver isolation tests
+        self.driver_user_b = User.objects.create_user(
+            username="ridedriverb",
+            email="ridedriverb@test.com",
+            phone="9999900021",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+            account_status=User.AccountStatus.ACTIVE,
+        )
+        self.driver_profile_b = DriverProfile.objects.create(
+            user=self.driver_user_b,
+            verification_status=DriverProfile.VerificationStatus.APPROVED,
+            availability_status=DriverProfile.AvailabilityStatus.ONLINE,
+        )
+        self.driver_vehicle_b = Vehicle.objects.create(
+            driver=self.driver_profile_b,
+            category=self.category_mini,
+            make="Hyundai",
+            model="i20",
+            registration_number="DL01DR0002",
+            colour="Silver",
+            verification_status=Vehicle.VerificationStatus.APPROVED,
+            is_active=True,
+        )
+
         # Authenticate driver
         login_resp = self.client.post(
             "/api/auth/token/",
@@ -1367,6 +1393,501 @@ class DriverRideAPITests(APITestCase):
         booking = self.create_test_booking(category=self.category_mini)
 
         response = self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("otp_hash", response.data)
+        self.assertNotIn("password", response.data)
+        self.assertNotIn("password_hash", response.data)
+
+    # -------------------------------------------------------------
+    # DRIVER ARRIVING TESTS
+    # -------------------------------------------------------------
+
+    def test_driver_arriving_success(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Booking.Status.DRIVER_ARRIVING)
+
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.DRIVER_ARRIVING)
+
+    def test_driver_arriving_unauthenticated_returns_401(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.client.credentials()
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_driver_arriving_customer_returns_403(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        login_cust = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridecustomer", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_cust.data['access']}")
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_driver_arriving_another_driver_returns_404(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        # Login as Driver B
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridedriverb", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_b.data['access']}")
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_driver_arriving_invalid_state_rejected(self):
+        booking = self.create_test_booking()  # In REQUESTED state
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        # Not yet assigned/accepted
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+        # Accept booking, then test after cancelled
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        booking.refresh_from_db()
+        booking.status = Booking.Status.CANCELLED
+        booking.save()
+
+        response_cancelled = self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.assertEqual(response_cancelled.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_arriving_response_does_not_leak_sensitive_fields(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("otp_hash", response.data)
+        self.assertNotIn("password", response.data)
+        self.assertNotIn("password_hash", response.data)
+
+    # -------------------------------------------------------------
+    # DRIVER ARRIVED TESTS
+    # -------------------------------------------------------------
+
+    def test_driver_arrived_success(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Booking.Status.DRIVER_ARRIVED)
+        self.assertIsNotNone(response.data["arrived_at"])
+
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.DRIVER_ARRIVED)
+        self.assertIsNotNone(booking.arrived_at)
+        self.assertTrue(bool(booking.otp_hash))
+
+    def test_driver_arrived_unauthenticated_returns_401(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+
+        self.client.credentials()
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_driver_arrived_customer_returns_403(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+
+        login_cust = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridecustomer", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_cust.data['access']}")
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_driver_arrived_another_driver_returns_404(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridedriverb", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_b.data['access']}")
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_driver_arrived_invalid_state_rejected(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        # Booking is ACCEPTED, not DRIVER_ARRIVING
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # -------------------------------------------------------------
+    # OTP VERIFICATION / RIDE START TESTS
+    # -------------------------------------------------------------
+
+    def test_driver_start_ride_valid_otp_success(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)  # Get the plaintext OTP
+
+        response = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Booking.Status.STARTED)
+        self.assertIsNotNone(response.data["started_at"])
+
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.STARTED)
+        self.assertTrue(booking.otp_verified)
+        self.assertIsNotNone(booking.started_at)
+
+    def test_driver_start_ride_invalid_otp_rejected(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        response = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": "0000"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.DRIVER_ARRIVED)
+        self.assertFalse(booking.otp_verified)
+
+    def test_driver_start_ride_missing_or_blank_otp_rejected(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        # Missing
+        response_missing = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {},
+            format="json",
+        )
+        self.assertEqual(response_missing.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Blank
+        response_blank = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": "   "},
+            format="json",
+        )
+        self.assertEqual(response_blank.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_start_ride_another_driver_returns_404(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+
+        # Switch to Driver B
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridedriverb", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_b.data['access']}")
+
+        response = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_driver_start_ride_customer_returns_403(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+
+        login_cust = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridecustomer", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_cust.data['access']}")
+
+        response = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_driver_start_ride_unauthenticated_returns_401(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        self.client.credentials()
+        response = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": "1234"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_driver_start_ride_not_arrived_state_rejected(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        # Booking is in ACCEPTED state
+
+        response = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": "1234"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_start_ride_response_does_not_leak_sensitive_fields(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+
+        response = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("otp_hash", response.data)
+        self.assertNotIn("otp_verified", response.data)
+        self.assertNotIn("password", response.data)
+        self.assertNotIn("password_hash", response.data)
+
+    def test_driver_start_ride_cannot_replay(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+
+        self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        # Attempt to call start again
+        response_replay = self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        self.assertEqual(response_replay.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # -------------------------------------------------------------
+    # COMPLETE RIDE TESTS
+    # -------------------------------------------------------------
+
+    def test_driver_complete_ride_success(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+        self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/complete/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Booking.Status.COMPLETED)
+        self.assertIsNotNone(response.data["completed_at"])
+        self.assertEqual(
+            Decimal(str(response.data["final_fare"])),
+            booking.estimated_fare,
+        )
+
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.COMPLETED)
+        self.assertIsNotNone(booking.completed_at)
+
+        self.driver_profile.refresh_from_db()
+        self.assertEqual(
+            self.driver_profile.availability_status,
+            DriverProfile.AvailabilityStatus.ONLINE,
+        )
+        self.assertEqual(self.driver_profile.completed_rides, 1)
+
+    def test_driver_complete_ride_before_started_rejected(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/complete/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_complete_ride_another_driver_returns_404(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+        self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        # Switch to Driver B
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridedriverb", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_b.data['access']}")
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/complete/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_driver_complete_ride_customer_returns_403(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+        self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        login_cust = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridecustomer", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_cust.data['access']}")
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/complete/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_driver_complete_ride_unauthenticated_returns_401(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+        self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        self.client.credentials()
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/complete/")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_driver_complete_ride_completed_cannot_transition_again(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+        self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+        self.client.post(f"/api/drivers/rides/{booking.id}/complete/")
+
+        # Attempt to complete again
+        response_again = self.client.post(f"/api/drivers/rides/{booking.id}/complete/")
+        self.assertEqual(response_again.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_complete_ride_response_does_not_leak_sensitive_fields(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arriving/")
+        self.client.post(f"/api/drivers/rides/{booking.id}/arrived/")
+
+        booking.refresh_from_db()
+        otp = generate_ride_otp(booking)
+        self.client.post(
+            f"/api/drivers/rides/{booking.id}/start/",
+            {"otp": otp},
+            format="json",
+        )
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/complete/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertNotIn("otp_hash", response.data)
