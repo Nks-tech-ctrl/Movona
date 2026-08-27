@@ -102,30 +102,21 @@ def find_eligible_drivers(category: VehicleCategory):
         vehicles__verification_status="APPROVED",
     ).distinct()
 
+
 def assign_driver(booking: Booking) -> Booking:
     """
     Assign an eligible driver and matching vehicle to a booking.
     """
 
     if booking.status != Booking.Status.REQUESTED:
-        raise ValidationError(
-            "Only requested bookings can be assigned."
-        )
+        raise ValidationError("Only requested bookings can be assigned.")
 
     with transaction.atomic():
-
-        eligible_drivers = find_eligible_drivers(
-            booking.category
-        )
+        eligible_drivers = find_eligible_drivers(booking.category)
 
         for driver in eligible_drivers:
-
             # Lock the driver while assigning the booking.
-            driver = (
-                DriverProfile.objects
-                .select_for_update()
-                .get(pk=driver.pk)
-            )
+            driver = DriverProfile.objects.select_for_update().get(pk=driver.pk)
 
             # Check whether the driver already has an active booking.
             driver_is_busy = Booking.objects.filter(
@@ -144,8 +135,7 @@ def assign_driver(booking: Booking) -> Booking:
             # Find this driver's active, approved vehicle
             # for the requested category.
             vehicle = (
-                Vehicle.objects
-                .select_for_update()
+                Vehicle.objects.select_for_update()
                 .filter(
                     driver=driver,
                     category=booking.category,
@@ -174,16 +164,147 @@ def assign_driver(booking: Booking) -> Booking:
             )
 
             # Driver is now occupied.
-            driver.availability_status = (
-                DriverProfile.AvailabilityStatus.BUSY
-            )
+            driver.availability_status = DriverProfile.AvailabilityStatus.BUSY
             driver.save(update_fields=["availability_status"])
 
             return booking
 
-    raise ValidationError(
-        "No eligible driver is currently available."
+    raise ValidationError("No eligible driver is currently available.")
+
+
+def find_eligible_bookings_for_driver(driver: DriverProfile):
+    """
+    Find pending ride requests that match the driver's active,
+    approved vehicle categories, provided the driver is active,
+    approved, and online.
+    """
+
+    if not getattr(driver.user, "is_driver", False):
+        return Booking.objects.none()
+
+    if driver.user.account_status != User.AccountStatus.ACTIVE:
+        return Booking.objects.none()
+
+    if driver.verification_status != DriverProfile.VerificationStatus.APPROVED:
+        return Booking.objects.none()
+
+    if driver.availability_status != DriverProfile.AvailabilityStatus.ONLINE:
+        return Booking.objects.none()
+
+    # Get categories for which this driver has an active, approved vehicle
+    categories = VehicleCategory.objects.filter(
+        vehicles__driver=driver,
+        vehicles__is_active=True,
+        vehicles__verification_status=Vehicle.VerificationStatus.APPROVED,
+        is_active=True,
+    ).distinct()
+
+    return (
+        Booking.objects.filter(
+            status=Booking.Status.REQUESTED,
+            driver__isnull=True,
+            category__in=categories,
+        )
+        .select_related("category", "customer__user")
+        .order_by("-requested_at")
     )
+
+
+@transaction.atomic
+def accept_booking(booking: Booking, driver: DriverProfile) -> Booking:
+    """
+    Assign a specific eligible driver and vehicle to a requested booking.
+    Uses select_for_update on booking, driver, and vehicle to prevent race conditions.
+    """
+
+    # 1. Lock and validate booking
+    try:
+        booking = (
+            Booking.objects.select_for_update()
+            .select_related("category")
+            .get(pk=booking.pk)
+        )
+    except Booking.DoesNotExist:
+        raise ValidationError("Booking not found.")
+
+    if booking.status != Booking.Status.REQUESTED:
+        raise ValidationError("This booking is no longer available for acceptance.")
+
+    if booking.driver is not None:
+        raise ValidationError("This booking is already assigned to a driver.")
+
+    # 2. Lock and validate driver
+    driver = (
+        DriverProfile.objects.select_for_update()
+        .select_related("user")
+        .get(pk=driver.pk)
+    )
+
+    if not getattr(driver.user, "is_driver", False):
+        raise ValidationError("User is not registered as a driver.")
+
+    if driver.user.account_status != User.AccountStatus.ACTIVE:
+        raise ValidationError("Driver account is not active.")
+
+    if driver.verification_status != DriverProfile.VerificationStatus.APPROVED:
+        raise ValidationError("Driver profile is not approved.")
+
+    if driver.availability_status != DriverProfile.AvailabilityStatus.ONLINE:
+        raise ValidationError("Driver is not currently available.")
+
+    # Check whether driver already has an active booking
+    driver_is_busy = Booking.objects.filter(
+        driver=driver,
+        status__in=[
+            Booking.Status.ACCEPTED,
+            Booking.Status.DRIVER_ARRIVING,
+            Booking.Status.DRIVER_ARRIVED,
+            Booking.Status.STARTED,
+        ],
+    ).exists()
+
+    if driver_is_busy:
+        raise ValidationError("Driver already has an active ride in progress.")
+
+    # 3. Find matching active, approved vehicle
+    vehicle = (
+        Vehicle.objects.select_for_update()
+        .filter(
+            driver=driver,
+            category=booking.category,
+            is_active=True,
+            verification_status=Vehicle.VerificationStatus.APPROVED,
+        )
+        .first()
+    )
+
+    if vehicle is None:
+        raise ValidationError(
+            "Driver does not have an approved, active vehicle for this category."
+        )
+
+    # 4. Assign driver and vehicle to booking
+    booking.driver = driver
+    booking.vehicle = vehicle
+    booking.status = Booking.Status.ACCEPTED
+    booking.accepted_at = timezone.now()
+    booking.save(
+        update_fields=[
+            "driver",
+            "vehicle",
+            "status",
+            "accepted_at",
+            "updated_at",
+        ]
+    )
+
+    # 5. Update driver availability
+    driver.availability_status = DriverProfile.AvailabilityStatus.BUSY
+    driver.save(update_fields=["availability_status"])
+
+    return booking
+
+
 def mark_driver_arriving(booking: Booking) -> Booking:
     """
     Mark the assigned driver as arriving.
@@ -195,9 +316,7 @@ def mark_driver_arriving(booking: Booking) -> Booking:
         )
 
     if booking.driver is None or booking.vehicle is None:
-        raise ValidationError(
-            "Booking must have an assigned driver and vehicle."
-        )
+        raise ValidationError("Booking must have an assigned driver and vehicle.")
 
     booking.status = Booking.Status.DRIVER_ARRIVING
 
@@ -210,15 +329,14 @@ def mark_driver_arriving(booking: Booking) -> Booking:
 
     return booking
 
+
 def mark_driver_arrived(booking: Booking) -> Booking:
     """
     Mark the driver as arrived at the pickup location.
     """
 
     if booking.status != Booking.Status.DRIVER_ARRIVING:
-        raise ValidationError(
-            "Driver must be arriving before being marked as arrived."
-        )
+        raise ValidationError("Driver must be arriving before being marked as arrived.")
 
     booking.status = Booking.Status.DRIVER_ARRIVED
 
@@ -233,6 +351,8 @@ def mark_driver_arrived(booking: Booking) -> Booking:
     )
 
     return booking
+
+
 def generate_ride_otp(booking: Booking) -> str:
     """
     Generate a 4-digit OTP for starting a ride.
@@ -243,15 +363,11 @@ def generate_ride_otp(booking: Booking) -> str:
         Booking.Status.DRIVER_ARRIVING,
         Booking.Status.DRIVER_ARRIVED,
     ):
-        raise ValidationError(
-            "OTP can only be generated for an accepted booking."
-        )
+        raise ValidationError("OTP can only be generated for an accepted booking.")
 
     otp = f"{secrets.randbelow(10000):04d}"
 
-    booking.otp_hash = hashlib.sha256(
-        otp.encode()
-    ).hexdigest()
+    booking.otp_hash = hashlib.sha256(otp.encode()).hexdigest()
 
     booking.otp_verified = False
 
@@ -264,29 +380,23 @@ def generate_ride_otp(booking: Booking) -> str:
     )
 
     return otp
+
+
 def verify_ride_otp(booking: Booking, otp: str) -> Booking:
     """
     Verify the ride OTP and start the ride.
     """
 
     if booking.status != Booking.Status.DRIVER_ARRIVED:
-        raise ValidationError(
-            "OTP can only be verified after the driver has arrived."
-        )
+        raise ValidationError("OTP can only be verified after the driver has arrived.")
 
     if not booking.otp_hash:
-        raise ValidationError(
-            "No OTP has been generated for this booking."
-        )
+        raise ValidationError("No OTP has been generated for this booking.")
 
-    otp_hash = hashlib.sha256(
-        otp.encode()
-    ).hexdigest()
+    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
 
     if otp_hash != booking.otp_hash:
-        raise ValidationError(
-            "Invalid ride OTP."
-        )
+        raise ValidationError("Invalid ride OTP.")
 
     booking.otp_verified = True
     booking.status = Booking.Status.STARTED
@@ -302,6 +412,8 @@ def verify_ride_otp(booking: Booking, otp: str) -> Booking:
     )
 
     return booking
+
+
 def complete_ride(
     booking: Booking,
     final_fare: Decimal,
@@ -311,22 +423,15 @@ def complete_ride(
     """
 
     if booking.status != Booking.Status.STARTED:
-        raise ValidationError(
-            "Only started rides can be completed."
-        )
+        raise ValidationError("Only started rides can be completed.")
 
     if final_fare < 0:
-        raise ValidationError(
-            "Final fare cannot be negative."
-        )
+        raise ValidationError("Final fare cannot be negative.")
 
     if booking.driver is None:
-        raise ValidationError(
-            "A booking must have an assigned driver."
-        )
+        raise ValidationError("A booking must have an assigned driver.")
 
     with transaction.atomic():
-
         booking.final_fare = final_fare
         booking.status = Booking.Status.COMPLETED
         booking.completed_at = timezone.now()
@@ -340,16 +445,10 @@ def complete_ride(
             ]
         )
 
-        driver = (
-            DriverProfile.objects
-            .select_for_update()
-            .get(pk=booking.driver.pk)
-        )
+        driver = DriverProfile.objects.select_for_update().get(pk=booking.driver.pk)
 
         driver.completed_rides += 1
-        driver.availability_status = (
-            DriverProfile.AvailabilityStatus.ONLINE
-        )
+        driver.availability_status = DriverProfile.AvailabilityStatus.ONLINE
 
         driver.save(
             update_fields=[
@@ -359,6 +458,7 @@ def complete_ride(
         )
 
     return booking
+
 
 def cancel_booking(
     booking: Booking,
@@ -378,22 +478,15 @@ def cancel_booking(
     )
 
     if booking.status not in cancellable_statuses:
-        raise ValidationError(
-            "This booking cannot be cancelled."
-        )
+        raise ValidationError("This booking cannot be cancelled.")
 
     if cancelled_by not in Booking.CancelledBy.values:
-        raise ValidationError(
-            "Invalid cancellation source."
-        )
+        raise ValidationError("Invalid cancellation source.")
 
     if not reason.strip():
-        raise ValidationError(
-            "Cancellation reason is required."
-        )
+        raise ValidationError("Cancellation reason is required.")
 
     with transaction.atomic():
-
         booking.status = Booking.Status.CANCELLED
         booking.cancelled_by = cancelled_by
         booking.cancellation_reason = reason
@@ -411,18 +504,10 @@ def cancel_booking(
 
         # Make the assigned driver available again.
         if booking.driver is not None:
-            driver = (
-                DriverProfile.objects
-                .select_for_update()
-                .get(pk=booking.driver.pk)
-            )
+            driver = DriverProfile.objects.select_for_update().get(pk=booking.driver.pk)
 
-            driver.availability_status = (
-                DriverProfile.AvailabilityStatus.ONLINE
-            )
+            driver.availability_status = DriverProfile.AvailabilityStatus.ONLINE
 
-            driver.save(
-                update_fields=["availability_status"]
-            )
+            driver.save(update_fields=["availability_status"])
 
     return booking

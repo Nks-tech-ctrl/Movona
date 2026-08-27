@@ -1060,4 +1060,316 @@ class RideAPITests(APITestCase):
         self.assertNotIn("password", response.data)
         self.assertNotIn("password_hash", response.data)
 
+
+class DriverRideAPITests(APITestCase):
+
+    def setUp(self):
+        self.password = "DriverSecret123!"
+
+        # Create Category 1 (Mini)
+        self.category_mini = VehicleCategory.objects.create(
+            name="Driver Mini",
+            description="Mini test category",
+            passenger_capacity=4,
+            base_fare=Decimal("50.00"),
+            per_km_rate=Decimal("10.00"),
+            per_minute_rate=Decimal("2.00"),
+            is_active=True,
+        )
+
+        # Create Category 2 (Sedan)
+        self.category_sedan = VehicleCategory.objects.create(
+            name="Driver Sedan",
+            description="Sedan test category",
+            passenger_capacity=4,
+            base_fare=Decimal("80.00"),
+            per_km_rate=Decimal("15.00"),
+            per_minute_rate=Decimal("3.00"),
+            is_active=True,
+        )
+
+        # Create Customer
+        self.customer_user = User.objects.create_user(
+            username="ridecustomer",
+            email="ridecustomer@test.com",
+            phone="9999900010",
+            password=self.password,
+            is_customer=True,
+            is_driver=False,
+        )
+        self.customer_profile = CustomerProfile.objects.create(
+            user=self.customer_user
+        )
+
+        # Create Driver
+        self.driver_user = User.objects.create_user(
+            username="ridedriver",
+            email="ridedriver@test.com",
+            phone="9999900020",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+            account_status=User.AccountStatus.ACTIVE,
+        )
+        self.driver_profile = DriverProfile.objects.create(
+            user=self.driver_user,
+            verification_status=DriverProfile.VerificationStatus.APPROVED,
+            availability_status=DriverProfile.AvailabilityStatus.ONLINE,
+        )
+
+        # Create Vehicle for Driver (Mini)
+        self.driver_vehicle = Vehicle.objects.create(
+            driver=self.driver_profile,
+            category=self.category_mini,
+            make="Toyota",
+            model="Yaris",
+            registration_number="DL01DR0001",
+            colour="White",
+            verification_status=Vehicle.VerificationStatus.APPROVED,
+            is_active=True,
+        )
+
+        # Authenticate driver
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridedriver", "password": self.password},
+            format="json",
+        )
+        self.driver_token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.driver_token}")
+
+    def create_test_booking(self, category=None, customer=None, status_val=Booking.Status.REQUESTED):
+        if category is None:
+            category = self.category_mini
+        if customer is None:
+            customer = self.customer_profile
+
+        booking = create_booking(
+            customer=customer,
+            category=category,
+            pickup_address="Pickup 123",
+            pickup_latitude=Decimal("28.6315"),
+            pickup_longitude=Decimal("77.2167"),
+            destination_address="Destination 456",
+            destination_latitude=Decimal("28.6129"),
+            destination_longitude=Decimal("77.2295"),
+            distance_km=Decimal("8.00"),
+            duration_minutes=20,
+        )
+        if status_val != Booking.Status.REQUESTED:
+            booking.status = status_val
+            booking.save()
+        return booking
+
+    def test_driver_eligible_rides_valid_driver_success(self):
+        booking = self.create_test_booking(category=self.category_mini)
+
+        response = self.client.get("/api/drivers/rides/eligible/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["id"], booking.id)
+        self.assertEqual(response.data[0]["category"], "Driver Mini")
+        self.assertEqual(response.data[0]["status"], Booking.Status.REQUESTED)
+        self.assertNotIn("otp_hash", response.data[0])
+        self.assertNotIn("password", response.data[0])
+
+    def test_driver_eligible_rides_incompatible_category_excluded(self):
+        # Booking in Sedan category (driver only has Mini)
+        self.create_test_booking(category=self.category_sedan)
+
+        response = self.client.get("/api/drivers/rides/eligible/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    def test_driver_eligible_rides_assigned_rides_excluded(self):
+        booking = self.create_test_booking(category=self.category_mini)
+        booking.status = Booking.Status.ACCEPTED
+        booking.driver = self.driver_profile
+        booking.save()
+
+        response = self.client.get("/api/drivers/rides/eligible/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    def test_driver_eligible_rides_cancelled_and_completed_excluded(self):
+        self.create_test_booking(category=self.category_mini, status_val=Booking.Status.CANCELLED)
+        self.create_test_booking(category=self.category_mini, status_val=Booking.Status.COMPLETED)
+
+        response = self.client.get("/api/drivers/rides/eligible/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    def test_driver_eligible_rides_busy_driver_receives_empty_list(self):
+        self.create_test_booking(category=self.category_mini)
+        self.driver_profile.availability_status = DriverProfile.AvailabilityStatus.BUSY
+        self.driver_profile.save()
+
+        response = self.client.get("/api/drivers/rides/eligible/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    def test_driver_eligible_rides_offline_driver_receives_empty_list(self):
+        self.create_test_booking(category=self.category_mini)
+        self.driver_profile.availability_status = DriverProfile.AvailabilityStatus.OFFLINE
+        self.driver_profile.save()
+
+        response = self.client.get("/api/drivers/rides/eligible/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    def test_driver_eligible_rides_unapproved_driver_receives_empty_list(self):
+        self.create_test_booking(category=self.category_mini)
+        self.driver_profile.verification_status = DriverProfile.VerificationStatus.PENDING
+        self.driver_profile.save()
+
+        response = self.client.get("/api/drivers/rides/eligible/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    def test_driver_eligible_rides_customer_returns_403(self):
+        login_cust = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridecustomer", "password": self.password},
+            format="json",
+        )
+        cust_token = login_cust.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {cust_token}")
+
+        response = self.client.get("/api/drivers/rides/eligible/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_driver_eligible_rides_unauthenticated_returns_401(self):
+        self.client.credentials()
+
+        response = self.client.get("/api/drivers/rides/eligible/")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_driver_accept_ride_success(self):
+        booking = self.create_test_booking(category=self.category_mini)
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Booking.Status.ACCEPTED)
+        self.assertIsNotNone(response.data["accepted_at"])
+
+        # Verify DB state
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, Booking.Status.ACCEPTED)
+        self.assertEqual(booking.driver, self.driver_profile)
+        self.assertEqual(booking.vehicle, self.driver_vehicle)
+
+        self.driver_profile.refresh_from_db()
+        self.assertEqual(
+            self.driver_profile.availability_status,
+            DriverProfile.AvailabilityStatus.BUSY,
+        )
+
+    def test_driver_accept_ride_already_assigned_rejected(self):
+        booking = self.create_test_booking(category=self.category_mini)
+        booking.status = Booking.Status.ACCEPTED
+        booking.driver = self.driver_profile
+        booking.save()
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_accept_ride_cancelled_or_completed_rejected(self):
+        cancelled_booking = self.create_test_booking(
+            category=self.category_mini, status_val=Booking.Status.CANCELLED
+        )
+        response_cancel = self.client.post(
+            f"/api/drivers/rides/{cancelled_booking.id}/accept/"
+        )
+        self.assertEqual(response_cancel.status_code, status.HTTP_400_BAD_REQUEST)
+
+        completed_booking = self.create_test_booking(
+            category=self.category_mini, status_val=Booking.Status.COMPLETED
+        )
+        response_completed = self.client.post(
+            f"/api/drivers/rides/{completed_booking.id}/accept/"
+        )
+        self.assertEqual(response_completed.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_accept_ride_incompatible_category_rejected(self):
+        sedan_booking = self.create_test_booking(category=self.category_sedan)
+
+        response = self.client.post(f"/api/drivers/rides/{sedan_booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_accept_ride_busy_driver_rejected(self):
+        booking = self.create_test_booking(category=self.category_mini)
+        self.driver_profile.availability_status = DriverProfile.AvailabilityStatus.BUSY
+        self.driver_profile.save()
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_accept_ride_offline_driver_rejected(self):
+        booking = self.create_test_booking(category=self.category_mini)
+        self.driver_profile.availability_status = DriverProfile.AvailabilityStatus.OFFLINE
+        self.driver_profile.save()
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_accept_ride_unapproved_driver_rejected(self):
+        booking = self.create_test_booking(category=self.category_mini)
+        self.driver_profile.verification_status = DriverProfile.VerificationStatus.PENDING
+        self.driver_profile.save()
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_accept_ride_nonexistent_booking_returns_404(self):
+        response = self.client.post("/api/drivers/rides/999999/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_driver_accept_ride_customer_returns_403(self):
+        booking = self.create_test_booking(category=self.category_mini)
+
+        login_cust = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridecustomer", "password": self.password},
+            format="json",
+        )
+        cust_token = login_cust.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {cust_token}")
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_driver_accept_ride_unauthenticated_returns_401(self):
+        booking = self.create_test_booking(category=self.category_mini)
+        self.client.credentials()
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_driver_accept_ride_response_does_not_leak_sensitive_fields(self):
+        booking = self.create_test_booking(category=self.category_mini)
+
+        response = self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("otp_hash", response.data)
+        self.assertNotIn("password", response.data)
+        self.assertNotIn("password_hash", response.data)
 

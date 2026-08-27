@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.test import APITestCase
 from rest_framework.views import APIView
 
-from accounts.models import CustomerProfile, User
+from accounts.models import CustomerProfile, DriverProfile, User
 from config.urls import urlpatterns as config_urlpatterns
 
 
@@ -493,3 +493,78 @@ class CustomerProfileTests(APITestCase):
         self.assertFalse(self.user.is_staff)
         self.assertFalse(self.user.is_driver)
         self.assertEqual(self.profile.total_rides, 0)
+
+
+@override_settings(ROOT_URLCONF="accounts.tests")
+class DriverProfileTests(APITestCase):
+    def setUp(self):
+        self.password = "DriverPass123!"
+        self.driver_user = User.objects.create_user(
+            username="profiledriver",
+            email="driver@movona.test",
+            phone="9876500010",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+        )
+        self.driver_profile = DriverProfile.objects.create(
+            user=self.driver_user,
+            verification_status=DriverProfile.VerificationStatus.APPROVED,
+            availability_status=DriverProfile.AvailabilityStatus.ONLINE,
+        )
+
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "profiledriver", "password": self.password},
+            format="json",
+        )
+        self.access_token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access_token}")
+
+    def test_get_driver_profile_authenticated_success(self):
+        response = self.client.get("/api/drivers/me/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["username"], "profiledriver")
+        self.assertEqual(response.data["email"], "driver@movona.test")
+        self.assertEqual(response.data["phone"], "9876500010")
+        self.assertEqual(
+            response.data["verification_status"],
+            DriverProfile.VerificationStatus.APPROVED,
+        )
+        self.assertEqual(
+            response.data["availability_status"],
+            DriverProfile.AvailabilityStatus.ONLINE,
+        )
+
+    def test_get_driver_profile_unauthenticated_returns_401(self):
+        self.client.credentials()
+        response = self.client.get("/api/drivers/me/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_get_driver_profile_customer_returns_403(self):
+        cust_user = User.objects.create_user(
+            username="customertryingdriver",
+            email="cust@movona.test",
+            phone="9876500011",
+            password=self.password,
+            is_customer=True,
+            is_driver=False,
+        )
+        CustomerProfile.objects.create(user=cust_user)
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "customertryingdriver", "password": self.password},
+            format="json",
+        )
+        cust_token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {cust_token}")
+
+        response = self.client.get("/api/drivers/me/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_driver_profile_response_does_not_leak_passwords_or_hashes(self):
+        response = self.client.get("/api/drivers/me/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("password", response.data)
+        self.assertNotIn("password_hash", response.data)
+        self.assertNotIn("otp_hash", response.data)

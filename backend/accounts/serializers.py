@@ -2,7 +2,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import CustomerProfile, User
+from .models import CustomerProfile, DriverProfile, User
 
 
 class CustomerRegisterSerializer(serializers.Serializer):
@@ -120,3 +120,27 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
             "total_rides",
             "created_at",
         ]
+
+
+class DriverProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    phone = serializers.CharField(source="user.phone", read_only=True)
+    created_at = serializers.DateTimeField(source="user.created_at", read_only=True)
+
+    class Meta:
+        model = DriverProfile
+        fields = [
+            "id",
+            "username",
+            "email",
+            "phone",
+            "profile_photo",
+            "date_of_birth",
+            "verification_status",
+            "availability_status",
+            "average_rating",
+            "completed_rides",
+            "created_at",
+        ]
+        read_only_fields = fields

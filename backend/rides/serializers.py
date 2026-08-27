@@ -119,4 +119,28 @@ class BookingResponseSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+class EligibleRideResponseSerializer(serializers.ModelSerializer):
+    category = serializers.CharField(source="category.name", read_only=True)
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id",
+            "status",
+            "category",
+            "pickup_address",
+            "pickup_latitude",
+            "pickup_longitude",
+            "destination_address",
+            "destination_latitude",
+            "destination_longitude",
+            "estimated_distance_km",
+            "estimated_duration_minutes",
+            "estimated_fare",
+            "requested_at",
+        ]
+        read_only_fields = fields
+
 

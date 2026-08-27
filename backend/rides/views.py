@@ -4,17 +4,21 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import IsDriver
 from .models import Booking
 from .serializers import (
     BookingCancelSerializer,
     BookingCreateSerializer,
     BookingResponseSerializer,
+    EligibleRideResponseSerializer,
     FareEstimateSerializer,
 )
 from .services import (
+    accept_booking,
     calculate_fare,
     cancel_booking,
     create_booking,
+    find_eligible_bookings_for_driver,
 )
 
 
@@ -202,6 +206,64 @@ class BookingCancelAPIView(APIView):
             )
 
         response_serializer = BookingResponseSerializer(cancelled_booking)
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class DriverEligibleRidesAPIView(APIView):
+    """
+    Retrieve all pending bookings matching the authenticated driver's vehicle categories.
+    """
+
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def get(self, request):
+        driver = getattr(request.user, "driver_profile", None)
+        if driver is None or not getattr(request.user, "is_driver", False):
+            return Response(
+                {"detail": "Only registered drivers can access this endpoint."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        eligible_bookings = find_eligible_bookings_for_driver(driver)
+        serializer = EligibleRideResponseSerializer(eligible_bookings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class DriverAcceptRideAPIView(APIView):
+    """
+    Accept an eligible booking by the authenticated driver.
+    """
+
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def post(self, request, pk):
+        driver = getattr(request.user, "driver_profile", None)
+        if driver is None or not getattr(request.user, "is_driver", False):
+            return Response(
+                {"detail": "Only registered drivers can accept ride bookings."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.get(pk=pk)
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            accepted_booking = accept_booking(booking=booking, driver=driver)
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.message if hasattr(exc, "message") else str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = BookingResponseSerializer(accepted_booking)
         return Response(
             response_serializer.data,
             status=status.HTTP_200_OK,
