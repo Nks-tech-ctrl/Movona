@@ -140,3 +140,36 @@ class Booking(models.Model):
 
     def __str__(self):
         return f"Booking #{self.id} - {self.status}"
+
+
+class Rating(models.Model):
+    class RatingType(models.TextChoices):
+        CUSTOMER_TO_DRIVER = "CUSTOMER_TO_DRIVER", "Customer to Driver"
+        DRIVER_TO_CUSTOMER = "DRIVER_TO_CUSTOMER", "Driver to Customer"
+
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="ratings",
+    )
+    rating_type = models.CharField(
+        max_length=25,
+        choices=RatingType.choices,
+    )
+    rating = models.PositiveSmallIntegerField()
+    feedback = models.TextField(
+        blank=True,
+        default="",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["booking", "rating_type"],
+                name="unique_booking_rating_per_direction",
+            )
+        ]
+
+    def __str__(self):
+        return f"Rating for Booking #{self.booking_id} ({self.rating_type}): {self.rating}/5"

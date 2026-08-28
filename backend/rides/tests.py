@@ -11,8 +11,9 @@ from accounts.models import (
     VehicleCategory,
 )
 
-from .models import Booking
+from .models import Booking, Rating
 from .services import (
+    accept_booking,
     assign_driver,
     calculate_fare,
     cancel_booking,
@@ -22,8 +23,10 @@ from .services import (
     generate_ride_otp,
     mark_driver_arrived,
     mark_driver_arriving,
+    rate_ride,
     verify_ride_otp,
 )
+
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -2007,4 +2010,314 @@ class DriverRideAPITests(APITestCase):
         self.client.credentials()
         response = self.client.get("/api/drivers/rides/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class RideRatingAPITests(APITestCase):
+    def setUp(self):
+        self.password = "RatingPass123!"
+
+        # Category
+        self.category = VehicleCategory.objects.create(
+            name="Rating Mini",
+            passenger_capacity=4,
+            base_fare=Decimal("50.00"),
+            per_km_rate=Decimal("10.00"),
+            per_minute_rate=Decimal("2.00"),
+            is_active=True,
+        )
+
+        # Customer A
+        self.cust_user_a = User.objects.create_user(
+            username="ratecustomer_a",
+            email="rate_a@test.com",
+            phone="9777700001",
+            password=self.password,
+            is_customer=True,
+            is_driver=False,
+        )
+        self.cust_profile_a = CustomerProfile.objects.create(
+            user=self.cust_user_a
+        )
+
+        # Customer B
+        self.cust_user_b = User.objects.create_user(
+            username="ratecustomer_b",
+            email="rate_b@test.com",
+            phone="9777700002",
+            password=self.password,
+            is_customer=True,
+            is_driver=False,
+        )
+        self.cust_profile_b = CustomerProfile.objects.create(
+            user=self.cust_user_b
+        )
+
+        # Driver A
+        self.driver_user_a = User.objects.create_user(
+            username="ratedriver_a",
+            email="driver_a@test.com",
+            phone="9777700010",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+            account_status=User.AccountStatus.ACTIVE,
+        )
+        self.driver_profile_a = DriverProfile.objects.create(
+            user=self.driver_user_a,
+            verification_status=DriverProfile.VerificationStatus.APPROVED,
+            availability_status=DriverProfile.AvailabilityStatus.ONLINE,
+        )
+        self.vehicle_a = Vehicle.objects.create(
+            driver=self.driver_profile_a,
+            category=self.category,
+            make="Toyota",
+            model="Etios",
+            registration_number="DL01RT0001",
+            colour="White",
+            verification_status=Vehicle.VerificationStatus.APPROVED,
+            is_active=True,
+        )
+
+        # Driver B
+        self.driver_user_b = User.objects.create_user(
+            username="ratedriver_b",
+            email="driver_b@test.com",
+            phone="9777700020",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+            account_status=User.AccountStatus.ACTIVE,
+        )
+        self.driver_profile_b = DriverProfile.objects.create(
+            user=self.driver_user_b,
+            verification_status=DriverProfile.VerificationStatus.APPROVED,
+            availability_status=DriverProfile.AvailabilityStatus.ONLINE,
+        )
+
+    def complete_test_ride(self, customer_profile, driver_profile, vehicle):
+        booking = create_booking(
+            customer=customer_profile,
+            category=self.category,
+            pickup_address="Pickup Rate",
+            pickup_latitude=Decimal("28.6315"),
+            pickup_longitude=Decimal("77.2167"),
+            destination_address="Destination Rate",
+            destination_latitude=Decimal("28.6129"),
+            destination_longitude=Decimal("77.2295"),
+            distance_km=Decimal("8.00"),
+            duration_minutes=20,
+        )
+        booking = accept_booking(booking=booking, driver=driver_profile)
+        booking = mark_driver_arriving(booking)
+        booking = mark_driver_arrived(booking)
+        otp = generate_ride_otp(booking)
+        booking = verify_ride_otp(booking, otp)
+        booking = complete_ride(booking, Decimal("150.00"))
+        return booking
+
+    def test_customer_rate_driver_success(self):
+        booking = self.complete_test_ride(
+            self.cust_profile_a, self.driver_profile_a, self.vehicle_a
+        )
+
+        # Login Customer A
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "ratecustomer_a", "password": self.password},
+            format="json",
+        )
+        token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.post(
+            f"/api/rides/{booking.id}/rate/",
+            {"rating": 5, "feedback": "Super driver, very clean car!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["rating"], 5)
+        self.assertEqual(response.data["rating_type"], Rating.RatingType.CUSTOMER_TO_DRIVER)
+        self.assertEqual(response.data["feedback"], "Super driver, very clean car!")
+
+        self.driver_profile_a.refresh_from_db()
+        self.assertEqual(self.driver_profile_a.average_rating, Decimal("5.00"))
+
+    def test_driver_rate_customer_success(self):
+        booking = self.complete_test_ride(
+            self.cust_profile_a, self.driver_profile_a, self.vehicle_a
+        )
+
+        # Login Driver A
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "ratedriver_a", "password": self.password},
+            format="json",
+        )
+        token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = self.client.post(
+            f"/api/drivers/rides/{booking.id}/rate/",
+            {"rating": 4, "feedback": "Polite customer, on time."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["rating"], 4)
+        self.assertEqual(response.data["rating_type"], Rating.RatingType.DRIVER_TO_CUSTOMER)
+
+        self.cust_profile_a.refresh_from_db()
+        self.assertEqual(self.cust_profile_a.average_rating, Decimal("4.00"))
+
+    def test_rating_uncompleted_ride_rejected(self):
+        booking = create_booking(
+            customer=self.cust_profile_a,
+            category=self.category,
+            pickup_address="Pickup Rate",
+            pickup_latitude=Decimal("28.6315"),
+            pickup_longitude=Decimal("77.2167"),
+            destination_address="Destination Rate",
+            destination_latitude=Decimal("28.6129"),
+            destination_longitude=Decimal("77.2295"),
+            distance_km=Decimal("8.00"),
+            duration_minutes=20,
+        )
+
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "ratecustomer_a", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_resp.data['access']}")
+
+        response = self.client.post(
+            f"/api/rides/{booking.id}/rate/",
+            {"rating": 5},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invalid_rating_score_rejected(self):
+        booking = self.complete_test_ride(
+            self.cust_profile_a, self.driver_profile_a, self.vehicle_a
+        )
+
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "ratecustomer_a", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_resp.data['access']}")
+
+        # 0 stars
+        r0 = self.client.post(f"/api/rides/{booking.id}/rate/", {"rating": 0}, format="json")
+        self.assertEqual(r0.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # 6 stars
+        r6 = self.client.post(f"/api/rides/{booking.id}/rate/", {"rating": 6}, format="json")
+        self.assertEqual(r6.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_duplicate_rating_rejected(self):
+        booking = self.complete_test_ride(
+            self.cust_profile_a, self.driver_profile_a, self.vehicle_a
+        )
+
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "ratecustomer_a", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_resp.data['access']}")
+
+        # First rating
+        r1 = self.client.post(f"/api/rides/{booking.id}/rate/", {"rating": 5}, format="json")
+        self.assertEqual(r1.status_code, status.HTTP_201_CREATED)
+
+        # Second rating (duplicate)
+        r2 = self.client.post(f"/api/rides/{booking.id}/rate/", {"rating": 4}, format="json")
+        self.assertEqual(r2.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cross_customer_cannot_rate_booking_returns_404(self):
+        booking = self.complete_test_ride(
+            self.cust_profile_a, self.driver_profile_a, self.vehicle_a
+        )
+
+        # Login Customer B
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "ratecustomer_b", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_resp.data['access']}")
+
+        response = self.client.post(
+            f"/api/rides/{booking.id}/rate/",
+            {"rating": 5},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_cross_driver_cannot_rate_booking_returns_404(self):
+        booking = self.complete_test_ride(
+            self.cust_profile_a, self.driver_profile_a, self.vehicle_a
+        )
+
+        # Login Driver B
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "ratedriver_b", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_resp.data['access']}")
+
+        response = self.client.post(
+            f"/api/drivers/rides/{booking.id}/rate/",
+            {"rating": 5},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_unauthenticated_rating_returns_401(self):
+        booking = self.complete_test_ride(
+            self.cust_profile_a, self.driver_profile_a, self.vehicle_a
+        )
+
+        self.client.credentials()
+        response = self.client.post(
+            f"/api/rides/{booking.id}/rate/",
+            {"rating": 5},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_multiple_ratings_average_calculation(self):
+        # Ride 1: 5 stars
+        b1 = self.complete_test_ride(
+            self.cust_profile_a, self.driver_profile_a, self.vehicle_a
+        )
+        login_a = self.client.post(
+            "/api/auth/token/",
+            {"username": "ratecustomer_a", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_a.data['access']}")
+        self.client.post(f"/api/rides/{b1.id}/rate/", {"rating": 5}, format="json")
+
+        # Ride 2: 4 stars
+        b2 = self.complete_test_ride(
+            self.cust_profile_b, self.driver_profile_a, self.vehicle_a
+        )
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "ratecustomer_b", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_b.data['access']}")
+        self.client.post(f"/api/rides/{b2.id}/rate/", {"rating": 4}, format="json")
+
+        self.driver_profile_a.refresh_from_db()
+        # (5 + 4) / 2 = 4.50
+        self.assertEqual(self.driver_profile_a.average_rating, Decimal("4.50"))
+
 

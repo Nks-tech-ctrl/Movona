@@ -4,7 +4,9 @@ import secrets
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Avg
 from django.utils import timezone
+
 
 from accounts.models import (
     CustomerProfile,
@@ -13,7 +15,7 @@ from accounts.models import (
     Vehicle,
     VehicleCategory,
 )
-from .models import Booking
+from .models import Booking, Rating
 
 
 def calculate_fare(
@@ -525,3 +527,73 @@ def cancel_booking(
             driver.save(update_fields=["availability_status"])
 
     return booking
+
+
+def rate_ride(
+    booking: Booking,
+    user: User,
+    score: int,
+    feedback: str = "",
+) -> Rating:
+    """
+    Submit a rating (1-5) for a completed ride.
+    Customers rate drivers (updating DriverProfile.average_rating).
+    Drivers rate customers (updating CustomerProfile.average_rating).
+    """
+
+    if booking.status != Booking.Status.COMPLETED:
+        raise ValidationError("Only completed rides can be rated.")
+
+    if not isinstance(score, int) or score < 1 or score > 5:
+        raise ValidationError("Rating must be an integer between 1 and 5.")
+
+    is_customer = booking.customer.user_id == user.id
+    is_driver = booking.driver is not None and booking.driver.user_id == user.id
+
+    if not is_customer and not is_driver:
+        raise ValidationError("User is not a participant in this booking.")
+
+    rating_type = (
+        Rating.RatingType.CUSTOMER_TO_DRIVER
+        if is_customer
+        else Rating.RatingType.DRIVER_TO_CUSTOMER
+    )
+
+    with transaction.atomic():
+        if Rating.objects.filter(booking=booking, rating_type=rating_type).exists():
+            raise ValidationError("This ride has already been rated for this role.")
+
+        rating_obj = Rating.objects.create(
+            booking=booking,
+            rating_type=rating_type,
+            rating=score,
+            feedback=feedback.strip() if feedback else "",
+        )
+
+        # Update average rating on target profile
+        if (
+            rating_type == Rating.RatingType.CUSTOMER_TO_DRIVER
+            and booking.driver is not None
+        ):
+            driver = DriverProfile.objects.select_for_update().get(pk=booking.driver.pk)
+            avg_result = Rating.objects.filter(
+                booking__driver=driver,
+                rating_type=Rating.RatingType.CUSTOMER_TO_DRIVER,
+            ).aggregate(Avg("rating"))["rating__avg"]
+            if avg_result is not None:
+                driver.average_rating = Decimal(str(round(avg_result, 2)))
+                driver.save(update_fields=["average_rating"])
+
+        elif rating_type == Rating.RatingType.DRIVER_TO_CUSTOMER:
+            customer = CustomerProfile.objects.select_for_update().get(
+                pk=booking.customer.pk
+            )
+            avg_result = Rating.objects.filter(
+                booking__customer=customer,
+                rating_type=Rating.RatingType.DRIVER_TO_CUSTOMER,
+            ).aggregate(Avg("rating"))["rating__avg"]
+            if avg_result is not None:
+                customer.average_rating = Decimal(str(round(avg_result, 2)))
+                customer.save(update_fields=["average_rating"])
+
+    return rating_obj

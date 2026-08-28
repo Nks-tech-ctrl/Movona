@@ -5,6 +5,7 @@ from .views import (
     BookingCreateAPIView,
     BookingDetailAPIView,
     BookingListAPIView,
+    CustomerRateRideAPIView,
     FareEstimateAPIView,
 )
 
@@ -34,5 +35,11 @@ urlpatterns = [
         BookingCancelAPIView.as_view(),
         name="booking-cancel",
     ),
+    path(
+        "<int:pk>/rate/",
+        CustomerRateRideAPIView.as_view(),
+        name="booking-rate",
+    ),
 ]
+
 

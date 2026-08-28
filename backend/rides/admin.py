@@ -1,6 +1,7 @@
 from django.contrib import admin
 
-from .models import Booking
+from .models import Booking, Rating
+
 
 
 @admin.register(Booking)
@@ -124,3 +125,17 @@ class BookingAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+
+@admin.register(Rating)
+class RatingAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "booking",
+        "rating_type",
+        "rating",
+        "created_at",
+    )
+    list_filter = ("rating_type", "rating")
+    search_fields = ("booking__id", "feedback")
+    readonly_fields = ("created_at",)

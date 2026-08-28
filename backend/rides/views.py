@@ -12,6 +12,8 @@ from .serializers import (
     BookingResponseSerializer,
     EligibleRideResponseSerializer,
     FareEstimateSerializer,
+    RatingCreateSerializer,
+    RatingResponseSerializer,
     RideStartSerializer,
 )
 from .services import (
@@ -23,6 +25,7 @@ from .services import (
     find_eligible_bookings_for_driver,
     mark_driver_arrived,
     mark_driver_arriving,
+    rate_ride,
     verify_ride_otp,
 )
 
@@ -142,13 +145,11 @@ class BookingListAPIView(APIView):
                 )
             queryset = queryset.filter(status=status_upper)
 
-        bookings = (
-            queryset.select_related("category", "customer__user")
-            .order_by("-created_at")
+        bookings = queryset.select_related("category", "customer__user").order_by(
+            "-created_at"
         )
         serializer = BookingResponseSerializer(bookings, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 
 class BookingDetailAPIView(APIView):
@@ -282,9 +283,8 @@ class DriverRideListAPIView(APIView):
                 )
             queryset = queryset.filter(status=status_upper)
 
-        bookings = (
-            queryset.select_related("category", "customer__user")
-            .order_by("-created_at")
+        bookings = queryset.select_related("category", "customer__user").order_by(
+            "-created_at"
         )
         serializer = BookingResponseSerializer(bookings, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -318,7 +318,6 @@ class DriverRideDetailAPIView(APIView):
 
         serializer = BookingResponseSerializer(booking)
         return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 
 class DriverAcceptRideAPIView(APIView):
@@ -522,3 +521,103 @@ class DriverCompleteRideAPIView(APIView):
             response_serializer.data,
             status=status.HTTP_200_OK,
         )
+
+
+class CustomerRateRideAPIView(APIView):
+    """
+    Submit a rating from the customer for a completed ride.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        customer = getattr(request.user, "customer_profile", None)
+        if customer is None or not getattr(request.user, "is_customer", False):
+            return Response(
+                {"detail": "Only registered customers can rate rides."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.get(pk=pk, customer=customer)
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RatingCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        score = serializer.validated_data["rating"]
+        feedback = serializer.validated_data.get("feedback", "")
+
+        try:
+            rating_obj = rate_ride(
+                booking=booking,
+                user=request.user,
+                score=score,
+                feedback=feedback,
+            )
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.message if hasattr(exc, "message") else str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = RatingResponseSerializer(rating_obj)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class DriverRateRideAPIView(APIView):
+    """
+    Submit a rating from the driver for a completed ride.
+    """
+
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def post(self, request, pk):
+        driver = getattr(request.user, "driver_profile", None)
+        if driver is None or not getattr(request.user, "is_driver", False):
+            return Response(
+                {"detail": "Only registered drivers can rate passengers."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.get(pk=pk, driver=driver)
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = RatingCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        score = serializer.validated_data["rating"]
+        feedback = serializer.validated_data.get("feedback", "")
+
+        try:
+            rating_obj = rate_ride(
+                booking=booking,
+                user=request.user,
+                score=score,
+                feedback=feedback,
+            )
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.message if hasattr(exc, "message") else str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = RatingResponseSerializer(rating_obj)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)

@@ -3,7 +3,8 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from accounts.models import VehicleCategory
-from .models import Booking
+from .models import Booking, Rating
+
 
 
 class FareEstimateSerializer(serializers.Serializer):
@@ -154,4 +155,36 @@ class RideStartSerializer(serializers.Serializer):
         allow_blank=False,
         trim_whitespace=True,
     )
+
+
+class RatingCreateSerializer(serializers.Serializer):
+    rating = serializers.IntegerField(
+        min_value=1,
+        max_value=5,
+        required=True,
+    )
+    feedback = serializers.CharField(
+        max_length=500,
+        required=False,
+        allow_blank=True,
+        default="",
+        trim_whitespace=True,
+    )
+
+
+class RatingResponseSerializer(serializers.ModelSerializer):
+    booking_id = serializers.IntegerField(source="booking.id", read_only=True)
+
+    class Meta:
+        model = Rating
+        fields = [
+            "id",
+            "booking_id",
+            "rating_type",
+            "rating",
+            "feedback",
+            "created_at",
+        ]
+        read_only_fields = fields
+
 
