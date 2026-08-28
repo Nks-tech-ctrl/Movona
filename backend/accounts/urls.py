@@ -6,6 +6,8 @@ from rides.views import (
     DriverArrivingAPIView,
     DriverCompleteRideAPIView,
     DriverEligibleRidesAPIView,
+    DriverRideDetailAPIView,
+    DriverRideListAPIView,
     DriverStartRideAPIView,
 )
 from .views import (
@@ -49,15 +51,26 @@ urlpatterns = [
         name="driver-vehicle-detail",
     ),
     path(
+        "drivers/rides/",
+        DriverRideListAPIView.as_view(),
+        name="driver-rides",
+    ),
+    path(
         "drivers/rides/eligible/",
         DriverEligibleRidesAPIView.as_view(),
         name="driver-rides-eligible",
+    ),
+    path(
+        "drivers/rides/<int:pk>/",
+        DriverRideDetailAPIView.as_view(),
+        name="driver-ride-detail",
     ),
     path(
         "drivers/rides/<int:pk>/accept/",
         DriverAcceptRideAPIView.as_view(),
         name="driver-ride-accept",
     ),
+
     path(
         "drivers/rides/<int:pk>/arriving/",
         DriverArrivingAPIView.as_view(),

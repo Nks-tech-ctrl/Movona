@@ -768,7 +768,22 @@ class RideAPITests(APITestCase):
         for booking_item in response.data:
             self.assertEqual(booking_item["customer_name"], "testcustomer")
 
+    def test_booking_list_status_filter_success(self):
+        self.client.post("/api/rides/book/", self.valid_booking_data, format="json")
+        response = self.client.get("/api/rides/?status=REQUESTED")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+        response_none = self.client.get("/api/rides/?status=COMPLETED")
+        self.assertEqual(response_none.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response_none.data), 0)
+
+    def test_booking_list_invalid_status_filter_returns_400(self):
+        response = self.client.get("/api/rides/?status=INVALID_STATUS")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_booking_list_unauthenticated_returns_401(self):
+
         self.client.credentials()  # Clear auth credentials
         response = self.client.get("/api/rides/")
 
@@ -1907,4 +1922,89 @@ class DriverRideAPITests(APITestCase):
         self.assertNotIn("otp_hash", response.data)
         self.assertNotIn("password", response.data)
         self.assertNotIn("password_hash", response.data)
+
+    # -------------------------------------------------------------
+    # DRIVER RIDE HISTORY AND DETAIL TESTS
+    # -------------------------------------------------------------
+
+    def test_driver_ride_list_authenticated_success(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        response = self.client.get("/api/drivers/rides/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["id"], booking.id)
+        self.assertEqual(response.data[0]["status"], Booking.Status.ACCEPTED)
+
+    def test_driver_ride_list_status_filter_success(self):
+        b1 = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{b1.id}/accept/")
+
+        response_accepted = self.client.get("/api/drivers/rides/?status=ACCEPTED")
+        self.assertEqual(response_accepted.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response_accepted.data), 1)
+
+        response_completed = self.client.get("/api/drivers/rides/?status=COMPLETED")
+        self.assertEqual(response_completed.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response_completed.data), 0)
+
+    def test_driver_ride_list_invalid_status_filter_returns_400(self):
+        response = self.client.get("/api/drivers/rides/?status=INVALID_STATUS")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_ride_list_another_driver_isolation(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        # Login as Driver B
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridedriverb", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_b.data['access']}")
+
+        response_b = self.client.get("/api/drivers/rides/")
+        self.assertEqual(response_b.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response_b.data), 0)
+
+    def test_driver_ride_detail_success(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        response = self.client.get(f"/api/drivers/rides/{booking.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], booking.id)
+
+    def test_driver_ride_detail_another_driver_returns_404(self):
+        booking = self.create_test_booking()
+        self.client.post(f"/api/drivers/rides/{booking.id}/accept/")
+
+        # Login as Driver B
+        login_b = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridedriverb", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_b.data['access']}")
+
+        response_b = self.client.get(f"/api/drivers/rides/{booking.id}/")
+        self.assertEqual(response_b.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_driver_ride_history_customer_returns_403(self):
+        login_cust = self.client.post(
+            "/api/auth/token/",
+            {"username": "ridecustomer", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login_cust.data['access']}")
+
+        response = self.client.get("/api/drivers/rides/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_driver_ride_history_unauthenticated_returns_401(self):
+        self.client.credentials()
+        response = self.client.get("/api/drivers/rides/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 

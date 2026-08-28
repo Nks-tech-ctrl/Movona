@@ -115,6 +115,7 @@ class BookingCreateAPIView(APIView):
 class BookingListAPIView(APIView):
     """
     Retrieve all bookings belonging to the authenticated customer.
+    Supports optional status filtering: ?status=COMPLETED
     """
 
     permission_classes = [IsAuthenticated]
@@ -127,13 +128,27 @@ class BookingListAPIView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        status_filter = request.query_params.get("status")
+        queryset = Booking.objects.filter(customer=customer)
+
+        if status_filter:
+            status_upper = status_filter.strip().upper()
+            if status_upper not in Booking.Status.values:
+                return Response(
+                    {
+                        "detail": f"Invalid status filter. Valid choices are: {', '.join(Booking.Status.values)}."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = queryset.filter(status=status_upper)
+
         bookings = (
-            Booking.objects.filter(customer=customer)
-            .select_related("category", "customer__user")
+            queryset.select_related("category", "customer__user")
             .order_by("-created_at")
         )
         serializer = BookingResponseSerializer(bookings, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 
 class BookingDetailAPIView(APIView):
@@ -235,6 +250,75 @@ class DriverEligibleRidesAPIView(APIView):
         eligible_bookings = find_eligible_bookings_for_driver(driver)
         serializer = EligibleRideResponseSerializer(eligible_bookings, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class DriverRideListAPIView(APIView):
+    """
+    Retrieve all bookings assigned to the authenticated driver.
+    Supports optional status filtering: ?status=COMPLETED
+    """
+
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def get(self, request):
+        driver = getattr(request.user, "driver_profile", None)
+        if driver is None or not getattr(request.user, "is_driver", False):
+            return Response(
+                {"detail": "Only registered drivers can access driver ride history."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        status_filter = request.query_params.get("status")
+        queryset = Booking.objects.filter(driver=driver)
+
+        if status_filter:
+            status_upper = status_filter.strip().upper()
+            if status_upper not in Booking.Status.values:
+                return Response(
+                    {
+                        "detail": f"Invalid status filter. Valid choices are: {', '.join(Booking.Status.values)}."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            queryset = queryset.filter(status=status_upper)
+
+        bookings = (
+            queryset.select_related("category", "customer__user")
+            .order_by("-created_at")
+        )
+        serializer = BookingResponseSerializer(bookings, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class DriverRideDetailAPIView(APIView):
+    """
+    Retrieve specific booking assigned to the authenticated driver.
+    Returns 404 if booking does not exist or belongs to another driver.
+    """
+
+    permission_classes = [IsAuthenticated, IsDriver]
+
+    def get(self, request, pk):
+        driver = getattr(request.user, "driver_profile", None)
+        if driver is None or not getattr(request.user, "is_driver", False):
+            return Response(
+                {"detail": "Only registered drivers can access driver ride details."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            booking = Booking.objects.select_related("category", "customer__user").get(
+                pk=pk, driver=driver
+            )
+        except Booking.DoesNotExist:
+            return Response(
+                {"detail": "Booking not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = BookingResponseSerializer(booking)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 
 class DriverAcceptRideAPIView(APIView):
