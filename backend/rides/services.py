@@ -1,18 +1,18 @@
 from decimal import Decimal
-import hashlib
 import secrets
 
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+
 from accounts.models import (
-    User,
     CustomerProfile,
     DriverProfile,
-    VehicleCategory,
+    User,
     Vehicle,
+    VehicleCategory,
 )
-
 from .models import Booking
 
 
@@ -343,7 +343,7 @@ def mark_driver_arrived(booking: Booking) -> Booking:
 
     if not booking.otp_hash:
         otp = f"{secrets.randbelow(10000):04d}"
-        booking.otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+        booking.otp_hash = make_password(otp)
         booking.otp_verified = False
         booking.save(
             update_fields=[
@@ -380,7 +380,7 @@ def generate_ride_otp(booking: Booking) -> str:
 
     otp = f"{secrets.randbelow(10000):04d}"
 
-    booking.otp_hash = hashlib.sha256(otp.encode()).hexdigest()
+    booking.otp_hash = make_password(otp)
 
     booking.otp_verified = False
 
@@ -406,9 +406,7 @@ def verify_ride_otp(booking: Booking, otp: str) -> Booking:
     if not booking.otp_hash:
         raise ValidationError("No OTP has been generated for this booking.")
 
-    otp_hash = hashlib.sha256(otp.encode()).hexdigest()
-
-    if otp_hash != booking.otp_hash:
+    if not check_password(otp, booking.otp_hash):
         raise ValidationError("Invalid ride OTP.")
 
     booking.otp_verified = True

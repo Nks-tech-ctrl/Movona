@@ -333,7 +333,21 @@ class RideLifecycleTests(RideTestBase):
             Booking.Status.DRIVER_ARRIVED,
         )
 
+    def test_otp_stored_with_django_password_hasher(self):
+        self.booking = mark_driver_arriving(self.booking)
+        self.booking = mark_driver_arrived(self.booking)
+        raw_otp = generate_ride_otp(self.booking)
+
+        self.booking.refresh_from_db()
+        # Verify raw OTP is not stored in plaintext
+        self.assertNotEqual(self.booking.otp_hash, raw_otp)
+        # Verify it verifies using Django's check_password
+        from django.contrib.auth.hashers import check_password
+        self.assertTrue(check_password(raw_otp, self.booking.otp_hash))
+        self.assertFalse(check_password("9999", self.booking.otp_hash))
+
     def test_valid_otp_starts_ride(self):
+
         self.booking = mark_driver_arriving(
             self.booking
         )
