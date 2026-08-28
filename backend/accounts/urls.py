@@ -12,6 +12,9 @@ from .views import (
     CustomerProfileAPIView,
     CustomerRegisterAPIView,
     DriverProfileAPIView,
+    DriverVehicleDetailAPIView,
+    DriverVehicleListCreateAPIView,
+    VehicleCategoryListAPIView,
 )
 
 urlpatterns = [
@@ -19,6 +22,11 @@ urlpatterns = [
         "auth/register/",
         CustomerRegisterAPIView.as_view(),
         name="customer-register",
+    ),
+    path(
+        "categories/",
+        VehicleCategoryListAPIView.as_view(),
+        name="vehicle-categories",
     ),
     path(
         "customers/me/",
@@ -29,6 +37,16 @@ urlpatterns = [
         "drivers/me/",
         DriverProfileAPIView.as_view(),
         name="driver-profile-me",
+    ),
+    path(
+        "drivers/vehicles/",
+        DriverVehicleListCreateAPIView.as_view(),
+        name="driver-vehicles",
+    ),
+    path(
+        "drivers/vehicles/<int:pk>/",
+        DriverVehicleDetailAPIView.as_view(),
+        name="driver-vehicle-detail",
     ),
     path(
         "drivers/rides/eligible/",

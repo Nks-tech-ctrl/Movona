@@ -2,7 +2,13 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import CustomerProfile, DriverProfile, User
+from .models import (
+    CustomerProfile,
+    DriverProfile,
+    User,
+    Vehicle,
+    VehicleCategory,
+)
 
 
 class CustomerRegisterSerializer(serializers.Serializer):
@@ -144,3 +150,173 @@ class DriverProfileSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+class VehicleCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VehicleCategory
+        fields = [
+            "id",
+            "name",
+            "description",
+            "passenger_capacity",
+            "base_fare",
+            "per_km_rate",
+            "per_minute_rate",
+            "is_active",
+        ]
+        read_only_fields = fields
+
+
+class DriverVehicleSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source="category.name", read_only=True)
+
+    class Meta:
+        model = Vehicle
+        fields = [
+            "id",
+            "category",
+            "category_name",
+            "make",
+            "model",
+            "registration_number",
+            "colour",
+            "seating_capacity",
+            "verification_status",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "category_name",
+            "verification_status",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class DriverVehicleCreateSerializer(serializers.ModelSerializer):
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=VehicleCategory.objects.filter(is_active=True)
+    )
+
+    class Meta:
+        model = Vehicle
+        fields = [
+            "id",
+            "category",
+            "make",
+            "model",
+            "registration_number",
+            "colour",
+            "seating_capacity",
+            "verification_status",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "verification_status",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_registration_number(self, value):
+        reg = value.strip().upper()
+        if Vehicle.objects.filter(registration_number__iexact=reg).exists():
+            raise serializers.ValidationError(
+                "A vehicle with this registration number already exists."
+            )
+        return reg
+
+    def create(self, validated_data):
+        driver = self.context["driver"]
+        validated_data["verification_status"] = Vehicle.VerificationStatus.PENDING
+        validated_data["is_active"] = False
+        return Vehicle.objects.create(driver=driver, **validated_data)
+
+
+class DriverVehicleUpdateSerializer(serializers.ModelSerializer):
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=VehicleCategory.objects.filter(is_active=True),
+        required=False,
+    )
+
+    class Meta:
+        model = Vehicle
+        fields = [
+            "id",
+            "category",
+            "make",
+            "model",
+            "registration_number",
+            "colour",
+            "seating_capacity",
+            "verification_status",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "verification_status",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_registration_number(self, value):
+        reg = value.strip().upper()
+        if (
+            Vehicle.objects.filter(registration_number__iexact=reg)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        ):
+            raise serializers.ValidationError(
+                "A vehicle with this registration number already exists."
+            )
+        return reg
+
+    def validate(self, attrs):
+        is_active = attrs.get("is_active")
+        if is_active is True:
+            if self.instance.verification_status != Vehicle.VerificationStatus.APPROVED:
+                raise serializers.ValidationError(
+                    {"is_active": "Only approved vehicles can be activated."}
+                )
+        return attrs
+
+
+class DriverProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DriverProfile
+        fields = [
+            "date_of_birth",
+            "availability_status",
+        ]
+
+    def validate_availability_status(self, value):
+        if value == DriverProfile.AvailabilityStatus.BUSY:
+            raise serializers.ValidationError("Cannot manually set status to BUSY.")
+
+        if value == DriverProfile.AvailabilityStatus.ONLINE:
+            if (
+                self.instance.verification_status
+                != DriverProfile.VerificationStatus.APPROVED
+            ):
+                raise serializers.ValidationError(
+                    "Unapproved drivers cannot go online."
+                )
+
+        if value == DriverProfile.AvailabilityStatus.OFFLINE:
+            if (
+                self.instance.availability_status
+                == DriverProfile.AvailabilityStatus.BUSY
+            ):
+                raise serializers.ValidationError(
+                    "Cannot go offline while on an active ride."
+                )
+
+        return value

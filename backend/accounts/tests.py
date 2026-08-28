@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.test import override_settings
 from django.urls import path
 from rest_framework import status
@@ -6,7 +8,14 @@ from rest_framework.response import Response
 from rest_framework.test import APITestCase
 from rest_framework.views import APIView
 
-from accounts.models import CustomerProfile, DriverProfile, User
+from accounts.models import (
+    CustomerProfile,
+    DriverProfile,
+    User,
+    Vehicle,
+    VehicleCategory,
+)
+
 from config.urls import urlpatterns as config_urlpatterns
 
 
@@ -568,3 +577,382 @@ class DriverProfileTests(APITestCase):
         self.assertNotIn("password", response.data)
         self.assertNotIn("password_hash", response.data)
         self.assertNotIn("otp_hash", response.data)
+
+
+class DriverProfileUpdateTests(APITestCase):
+    def setUp(self):
+        self.password = "DriverPass123!"
+        self.driver_user = User.objects.create_user(
+            username="updatedriver",
+            email="updatedriver@test.com",
+            phone="9876500099",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+            account_status=User.AccountStatus.ACTIVE,
+        )
+        self.driver_profile = DriverProfile.objects.create(
+            user=self.driver_user,
+            verification_status=DriverProfile.VerificationStatus.APPROVED,
+            availability_status=DriverProfile.AvailabilityStatus.ONLINE,
+        )
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "updatedriver", "password": self.password},
+            format="json",
+        )
+        self.token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.token}")
+
+    def test_update_availability_status_online_to_offline(self):
+        response = self.client.patch(
+            "/api/drivers/me/",
+            {"availability_status": DriverProfile.AvailabilityStatus.OFFLINE},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["availability_status"],
+            DriverProfile.AvailabilityStatus.OFFLINE,
+        )
+        self.driver_profile.refresh_from_db()
+        self.assertEqual(
+            self.driver_profile.availability_status,
+            DriverProfile.AvailabilityStatus.OFFLINE,
+        )
+
+    def test_unapproved_driver_cannot_go_online(self):
+        self.driver_profile.verification_status = (
+            DriverProfile.VerificationStatus.PENDING
+        )
+        self.driver_profile.availability_status = (
+            DriverProfile.AvailabilityStatus.OFFLINE
+        )
+        self.driver_profile.save()
+
+        response = self.client.patch(
+            "/api/drivers/me/",
+            {"availability_status": DriverProfile.AvailabilityStatus.ONLINE},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_busy_driver_cannot_manually_change_status(self):
+        self.driver_profile.availability_status = DriverProfile.AvailabilityStatus.BUSY
+        self.driver_profile.save()
+
+        response = self.client.patch(
+            "/api/drivers/me/",
+            {"availability_status": DriverProfile.AvailabilityStatus.OFFLINE},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_cannot_manually_set_busy(self):
+        response = self.client.patch(
+            "/api/drivers/me/",
+            {"availability_status": DriverProfile.AvailabilityStatus.BUSY},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class VehicleCategoryAPITests(APITestCase):
+    def setUp(self):
+        self.cat1 = VehicleCategory.objects.create(
+            name="Hatchback",
+            description="Budget ride",
+            passenger_capacity=4,
+            base_fare=Decimal("40.00"),
+            per_km_rate=Decimal("10.00"),
+            per_minute_rate=Decimal("1.50"),
+            is_active=True,
+        )
+        self.cat2 = VehicleCategory.objects.create(
+            name="SUV",
+            description="Large vehicle",
+            passenger_capacity=6,
+            base_fare=Decimal("80.00"),
+            per_km_rate=Decimal("18.00"),
+            per_minute_rate=Decimal("3.00"),
+            is_active=False,
+        )
+
+    def test_list_vehicle_categories_public(self):
+        response = self.client.get("/api/categories/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Only active categories returned
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["name"], "Hatchback")
+
+
+class DriverVehicleAPITests(APITestCase):
+    def setUp(self):
+        self.password = "VehiclePass123!"
+        self.driver_user = User.objects.create_user(
+            username="vehicledriver",
+            email="vehicledriver@test.com",
+            phone="9876500055",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+            account_status=User.AccountStatus.ACTIVE,
+        )
+        self.driver_profile = DriverProfile.objects.create(
+            user=self.driver_user,
+            verification_status=DriverProfile.VerificationStatus.APPROVED,
+            availability_status=DriverProfile.AvailabilityStatus.ONLINE,
+        )
+
+        # Driver B
+        self.driver_user_b = User.objects.create_user(
+            username="vehicledriverb",
+            email="vehicledriverb@test.com",
+            phone="9876500056",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+            account_status=User.AccountStatus.ACTIVE,
+        )
+        self.driver_profile_b = DriverProfile.objects.create(
+            user=self.driver_user_b,
+            verification_status=DriverProfile.VerificationStatus.APPROVED,
+            availability_status=DriverProfile.AvailabilityStatus.ONLINE,
+        )
+
+        # Customer User
+        self.customer_user = User.objects.create_user(
+            username="vehiclecust",
+            email="vehiclecust@test.com",
+            phone="9876500057",
+            password=self.password,
+            is_customer=True,
+            is_driver=False,
+        )
+        self.customer_profile = CustomerProfile.objects.create(user=self.customer_user)
+
+        self.category = VehicleCategory.objects.create(
+            name="Prime Sedan",
+            passenger_capacity=4,
+            base_fare=Decimal("50.00"),
+            per_km_rate=Decimal("12.00"),
+            per_minute_rate=Decimal("2.00"),
+            is_active=True,
+        )
+
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "vehicledriver", "password": self.password},
+            format="json",
+        )
+        self.driver_token = login_resp.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.driver_token}")
+
+    def test_driver_create_vehicle_success(self):
+        payload = {
+            "category": self.category.id,
+            "make": "Honda",
+            "model": "Civic",
+            "registration_number": "DL01AB1234",
+            "colour": "Black",
+            "seating_capacity": 4,
+        }
+        response = self.client.post("/api/drivers/vehicles/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["make"], "Honda")
+        self.assertEqual(response.data["registration_number"], "DL01AB1234")
+        # Enforce server defaults
+        self.assertEqual(
+            response.data["verification_status"],
+            Vehicle.VerificationStatus.PENDING,
+        )
+        self.assertFalse(response.data["is_active"])
+
+    def test_driver_create_vehicle_duplicate_registration_rejected(self):
+        Vehicle.objects.create(
+            driver=self.driver_profile,
+            category=self.category,
+            make="Honda",
+            model="City",
+            registration_number="DL01AB1234",
+            colour="White",
+        )
+        payload = {
+            "category": self.category.id,
+            "make": "Honda",
+            "model": "Civic",
+            "registration_number": "DL01AB1234",
+            "colour": "Black",
+        }
+        response = self.client.post("/api/drivers/vehicles/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_list_vehicles_scoped_to_driver(self):
+        v1 = Vehicle.objects.create(
+            driver=self.driver_profile,
+            category=self.category,
+            make="Honda",
+            model="City",
+            registration_number="DL01AB1111",
+            colour="White",
+        )
+        # Driver B vehicle
+        Vehicle.objects.create(
+            driver=self.driver_profile_b,
+            category=self.category,
+            make="Hyundai",
+            model="Verna",
+            registration_number="DL01AB2222",
+            colour="Grey",
+        )
+
+        response = self.client.get("/api/drivers/vehicles/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["id"], v1.id)
+
+    def test_driver_get_vehicle_detail_success(self):
+        v1 = Vehicle.objects.create(
+            driver=self.driver_profile,
+            category=self.category,
+            make="Honda",
+            model="City",
+            registration_number="DL01AB1111",
+            colour="White",
+        )
+        response = self.client.get(f"/api/drivers/vehicles/{v1.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["registration_number"], "DL01AB1111")
+
+    def test_driver_get_another_driver_vehicle_returns_404(self):
+        v_b = Vehicle.objects.create(
+            driver=self.driver_profile_b,
+            category=self.category,
+            make="Hyundai",
+            model="Verna",
+            registration_number="DL01AB2222",
+            colour="Grey",
+        )
+        response = self.client.get(f"/api/drivers/vehicles/{v_b.id}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_driver_update_vehicle_success(self):
+        v1 = Vehicle.objects.create(
+            driver=self.driver_profile,
+            category=self.category,
+            make="Honda",
+            model="City",
+            registration_number="DL01AB1111",
+            colour="White",
+        )
+        response = self.client.patch(
+            f"/api/drivers/vehicles/{v1.id}/",
+            {"colour": "Metallic Blue"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["colour"], "Metallic Blue")
+
+    def test_driver_cannot_self_approve_verification_status(self):
+        v1 = Vehicle.objects.create(
+            driver=self.driver_profile,
+            category=self.category,
+            make="Honda",
+            model="City",
+            registration_number="DL01AB1111",
+            colour="White",
+            verification_status=Vehicle.VerificationStatus.PENDING,
+        )
+        response = self.client.patch(
+            f"/api/drivers/vehicles/{v1.id}/",
+            {"verification_status": Vehicle.VerificationStatus.APPROVED},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        v1.refresh_from_db()
+        # verification_status must remain PENDING
+        self.assertEqual(
+            v1.verification_status,
+            Vehicle.VerificationStatus.PENDING,
+        )
+
+    def test_driver_cannot_activate_unapproved_vehicle(self):
+        v1 = Vehicle.objects.create(
+            driver=self.driver_profile,
+            category=self.category,
+            make="Honda",
+            model="City",
+            registration_number="DL01AB1111",
+            colour="White",
+            verification_status=Vehicle.VerificationStatus.PENDING,
+            is_active=False,
+        )
+        response = self.client.patch(
+            f"/api/drivers/vehicles/{v1.id}/",
+            {"is_active": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_driver_can_activate_approved_vehicle(self):
+        v1 = Vehicle.objects.create(
+            driver=self.driver_profile,
+            category=self.category,
+            make="Honda",
+            model="City",
+            registration_number="DL01AB1111",
+            colour="White",
+            verification_status=Vehicle.VerificationStatus.APPROVED,
+            is_active=False,
+        )
+        response = self.client.patch(
+            f"/api/drivers/vehicles/{v1.id}/",
+            {"is_active": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["is_active"])
+
+    def test_driver_delete_vehicle_success(self):
+        v1 = Vehicle.objects.create(
+            driver=self.driver_profile,
+            category=self.category,
+            make="Honda",
+            model="City",
+            registration_number="DL01AB1111",
+            colour="White",
+        )
+        response = self.client.delete(f"/api/drivers/vehicles/{v1.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Vehicle.objects.filter(id=v1.id).exists())
+
+    def test_driver_delete_another_driver_vehicle_returns_404(self):
+        v_b = Vehicle.objects.create(
+            driver=self.driver_profile_b,
+            category=self.category,
+            make="Hyundai",
+            model="Verna",
+            registration_number="DL01AB2222",
+            colour="Grey",
+        )
+        response = self.client.delete(f"/api/drivers/vehicles/{v_b.id}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(Vehicle.objects.filter(id=v_b.id).exists())
+
+    def test_customer_access_vehicle_endpoints_returns_403(self):
+        login_cust = self.client.post(
+            "/api/auth/token/",
+            {"username": "vehiclecust", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {login_cust.data['access']}"
+        )
+
+        response = self.client.get("/api/drivers/vehicles/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unauthenticated_access_vehicle_endpoints_returns_401(self):
+        self.client.credentials()
+        response = self.client.get("/api/drivers/vehicles/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
