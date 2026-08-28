@@ -23,9 +23,11 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ## 2. Authentication Endpoints
 
 ### 2.1 Customer Registration
+
 - **Endpoint**: `POST /api/auth/register/`
 - **Auth**: Public (`AllowAny`)
 - **Request Body**:
+
 ```json
 {
   "username": "johndoe",
@@ -35,7 +37,9 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
   "password_confirm": "SecurePassword123!"
 }
 ```
+
 - **Response (201 Created)**:
+
 ```json
 {
   "id": 1,
@@ -48,16 +52,20 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ```
 
 ### 2.2 Obtain JWT Token (Login)
+
 - **Endpoint**: `POST /api/auth/token/`
 - **Auth**: Public
 - **Request Body**:
+
 ```json
 {
   "username": "johndoe",
   "password": "SecurePassword123!"
 }
 ```
+
 - **Response (200 OK)**:
+
 ```json
 {
   "access": "eyJhbGciOiJIUzI1NiIsIn...",
@@ -66,15 +74,19 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ```
 
 ### 2.3 Refresh JWT Token
+
 - **Endpoint**: `POST /api/auth/token/refresh/`
 - **Auth**: Public
 - **Request Body**:
+
 ```json
 {
   "refresh": "eyJhbGciOiJIUzI1NiIsIn..."
 }
 ```
+
 - **Response (200 OK)**:
+
 ```json
 {
   "access": "eyJhbGciOiJIUzI1NiIsIn..."
@@ -86,9 +98,11 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ## 3. Vehicle Categories & Vehicles
 
 ### 3.1 List Vehicle Categories
+
 - **Endpoint**: `GET /api/categories/`
 - **Auth**: Public
 - **Response (200 OK)**:
+
 ```json
 [
   {
@@ -105,9 +119,11 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ```
 
 ### 3.2 List Driver Vehicles
+
 - **Endpoint**: `GET /api/drivers/vehicles/`
 - **Auth**: Authenticated Driver (`IsDriver`)
 - **Response (200 OK)**:
+
 ```json
 [
   {
@@ -128,9 +144,11 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ```
 
 ### 3.3 Register Driver Vehicle
+
 - **Endpoint**: `POST /api/drivers/vehicles/`
 - **Auth**: Authenticated Driver (`IsDriver`)
 - **Request Body**:
+
 ```json
 {
   "category": 1,
@@ -141,21 +159,26 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
   "seating_capacity": 4
 }
 ```
+
 - **Response (201 Created)**: Returns created vehicle with `verification_status: "PENDING"` and `is_active: false`.
 
 ### 3.4 Update Driver Vehicle
+
 - **Endpoint**: `PATCH /api/drivers/vehicles/<id>/`
 - **Auth**: Authenticated Driver (Owner only)
 - **Request Body**:
+
 ```json
 {
   "colour": "Metallic Blue",
   "is_active": true
 }
 ```
-*Note: A vehicle can only be set to `is_active: true` once verified and approved by admin.*
+
+_Note: A vehicle can only be set to `is_active: true` once verified and approved by admin._
 
 ### 3.5 Delete Driver Vehicle
+
 - **Endpoint**: `DELETE /api/drivers/vehicles/<id>/`
 - **Auth**: Authenticated Driver (Owner only)
 - **Response (204 No Content)**
@@ -165,9 +188,11 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ## 4. Customer Profiles & Ride Management
 
 ### 4.1 Get Customer Profile
+
 - **Endpoint**: `GET /api/customers/me/`
 - **Auth**: Authenticated Customer
 - **Response (200 OK)**:
+
 ```json
 {
   "id": 1,
@@ -185,9 +210,11 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ```
 
 ### 4.2 Update Customer Profile
+
 - **Endpoint**: `PATCH /api/customers/me/`
 - **Auth**: Authenticated Customer
 - **Request Body**:
+
 ```json
 {
   "gender": "Male",
@@ -196,17 +223,21 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ```
 
 ### 4.3 Fare Estimate
+
 - **Endpoint**: `POST /api/rides/estimate/`
 - **Auth**: Public
 - **Request Body**:
+
 ```json
 {
   "category": "Mini",
-  "distance_km": 12.50,
+  "distance_km": 12.5,
   "duration_minutes": 25
 }
 ```
+
 - **Response (200 OK)**:
+
 ```json
 {
   "category": "Mini",
@@ -217,9 +248,11 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ```
 
 ### 4.4 Book a Ride
+
 - **Endpoint**: `POST /api/rides/book/`
 - **Auth**: Authenticated Customer
 - **Request Body**:
+
 ```json
 {
   "category": "Mini",
@@ -233,7 +266,9 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
   "duration_minutes": 20
 }
 ```
+
 - **Response (201 Created)**:
+
 ```json
 {
   "id": 101,
@@ -261,33 +296,41 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ```
 
 ### 4.5 Customer Ride History
+
 - **Endpoint**: `GET /api/rides/`
 - **Query Params**: `?status=COMPLETED` (optional filter)
 - **Auth**: Authenticated Customer
 - **Response (200 OK)**: Array of booking objects.
 
 ### 4.6 Cancel Booking
+
 - **Endpoint**: `POST /api/rides/<id>/cancel/`
 - **Auth**: Authenticated Customer (Owner only)
 - **Request Body**:
+
 ```json
 {
   "reason": "Driver took too long"
 }
 ```
+
 - **Response (200 OK)**: Updated booking object with `status: "CANCELLED"`.
 
 ### 4.7 Customer Rate Driver
+
 - **Endpoint**: `POST /api/rides/<id>/rate/`
 - **Auth**: Authenticated Customer (Owner of completed booking)
 - **Request Body**:
+
 ```json
 {
   "rating": 5,
   "feedback": "Smooth driving and polite attitude."
 }
 ```
+
 - **Response (201 Created)**:
+
 ```json
 {
   "id": 1,
@@ -304,9 +347,11 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ## 5. Driver Operations & Ride Lifecycle
 
 ### 5.1 Get / Update Driver Profile & Availability
+
 - **Endpoint**: `GET /api/drivers/me/` | `PATCH /api/drivers/me/`
 - **Auth**: Authenticated Driver (`IsDriver`)
 - **Request Body (PATCH)**:
+
 ```json
 {
   "availability_status": "ONLINE"
@@ -314,61 +359,73 @@ Comprehensive API Reference for the **Movona** Backend Ride-Booking Platform.
 ```
 
 ### 5.2 Discover Eligible Rides
+
 - **Endpoint**: `GET /api/drivers/rides/eligible/`
 - **Auth**: Authenticated Driver (`IsDriver`)
 - **Response (200 OK)**: Returns list of pending (`REQUESTED`) bookings matching driver's vehicle categories when driver is `ONLINE`.
 
 ### 5.3 Accept a Ride
+
 - **Endpoint**: `POST /api/drivers/rides/<id>/accept/`
 - **Auth**: Authenticated Driver (`IsDriver`)
 - **Response (200 OK)**: Transitions booking to `ACCEPTED`, assigns driver and vehicle, sets driver status to `BUSY`.
 
 ### 5.4 Driver Ride History
+
 - **Endpoint**: `GET /api/drivers/rides/`
 - **Query Params**: `?status=STARTED` (optional filter)
 - **Auth**: Authenticated Driver (`IsDriver`)
 - **Response (200 OK)**: Array of bookings assigned to authenticated driver.
 
 ### 5.5 Mark Driver Arriving
+
 - **Endpoint**: `POST /api/drivers/rides/<id>/arriving/`
 - **Auth**: Authenticated Assigned Driver
 - **Transition**: `ACCEPTED` $\rightarrow$ `DRIVER_ARRIVING`
 - **Response (200 OK)**
 
 ### 5.6 Mark Driver Arrived
+
 - **Endpoint**: `POST /api/drivers/rides/<id>/arrived/`
 - **Auth**: Authenticated Assigned Driver
 - **Transition**: `DRIVER_ARRIVING` $\rightarrow$ `DRIVER_ARRIVED`
 - **Response (200 OK)**: Records `arrived_at` timestamp and prepares hashed ride OTP.
 
 ### 5.7 Verify OTP & Start Ride
+
 - **Endpoint**: `POST /api/drivers/rides/<id>/start/`
 - **Auth**: Authenticated Assigned Driver
 - **Transition**: `DRIVER_ARRIVED` $\rightarrow$ `STARTED`
 - **Request Body**:
+
 ```json
 {
   "otp": "4829"
 }
 ```
+
 - **Response (200 OK)**: Verifies OTP against secure Django password hash and records `started_at` timestamp.
 
 ### 5.8 Complete Ride
+
 - **Endpoint**: `POST /api/drivers/rides/<id>/complete/`
 - **Auth**: Authenticated Assigned Driver
 - **Transition**: `STARTED` $\rightarrow$ `COMPLETED`
 - **Response (200 OK)**: Calculates final fare server-side, increments driver's `completed_rides`, and frees driver availability to `ONLINE`.
 
 ### 5.9 Driver Rate Customer
+
 - **Endpoint**: `POST /api/drivers/rides/<id>/rate/`
 - **Auth**: Authenticated Assigned Driver
 - **Request Body**:
+
 ```json
 {
   "rating": 5,
   "feedback": "Passenger was on time."
 }
 ```
+
 - **Response (201 Created)**
 
 ---
