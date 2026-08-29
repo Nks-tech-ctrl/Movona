@@ -1,15 +1,28 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import api from "../api/axios";
 import "./AuthPage.css";
 
 function LoginPage() {
-  const [email, setEmail] = useState("");
+  const navigate = useNavigate();
+  const [username, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
-    console.log("Login form submitted");
+    try {
+      const response = await api.post("/auth/token/", {
+        username: username,
+        password: password,
+      });
+
+      console.log("Login successful:", response.data);
+
+      navigate("/");
+    } catch (error) {
+      console.error("Login failed:", error.response?.data);
+    }
   }
 
   return (
@@ -19,13 +32,13 @@ function LoginPage() {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="username">Username</label>
 
             <input
-              id="email"
-              type="email"
-              placeholder="Enter your email"
-              value={email}
+              id="username"
+              type="text"
+              placeholder="Enter your username"
+              value={username}
               onChange={(event) => setEmail(event.target.value)}
               required
             />
