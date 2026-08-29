@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import api from "../api/axios";
 import "./AuthPage.css";
 
 function RegisterPage() {
+  const navigate =useNavigate();
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -22,7 +24,7 @@ function RegisterPage() {
     setError("");
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
     if (formData.password !== formData.password_confirm) {
@@ -30,9 +32,17 @@ function RegisterPage() {
       return;
     }
 
-    setError("");
+    try {
+      setError("");
 
-    console.log("Registration form submitted");
+      const response = await api.post("/auth/register/", formData);
+
+      console.log("Registration successful:", response.data);
+      navigate("/login");
+    } catch (error) {
+      console.error("Registration failed:", error.response?.data);
+      setError("Registration failed. Please try again.");
+    }
   }
 
   return (
