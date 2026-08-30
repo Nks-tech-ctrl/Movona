@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, useContext } from "react";
+
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import { AuthContext } from "../context/AuthContent";
 import "./AuthPage.css";
 
 function LoginPage() {
   const navigate = useNavigate();
-  const [username, setEmail] = useState("");
+  const { loginUser } = useContext(AuthContext);
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
   async function handleSubmit(event) {
@@ -15,6 +18,12 @@ function LoginPage() {
       const response = await api.post("/auth/token/", {
         username: username,
         password: password,
+      });
+      localStorage.setItem("access_token", response.data.access);
+      localStorage.setItem("refresh_token", response.data.refresh);
+
+      loginUser({
+        username: username,
       });
 
       console.log("Login successful:", response.data);
@@ -39,7 +48,7 @@ function LoginPage() {
               type="text"
               placeholder="Enter your username"
               value={username}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => setUsername(event.target.value)}
               required
             />
           </div>
