@@ -1,15 +1,82 @@
 .car-card {
-  border: 1px solid #ddd;
-  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
   padding: 20px;
-  background-color: white;
+  background-color: #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.car-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+.car-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  gap: 8px;
 }
 
 .car-card h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
+  margin: 0;
+  color: #1e293b;
+  font-size: 1.25rem;
+}
+
+.availability-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.availability-badge.available {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+.availability-badge.unavailable {
+  background-color: #fee2e2;
+  color: #b91c1c;
 }
 
 .car-card p {
-  margin: 8px 0;
+  margin: 6px 0;
+  color: #64748b;
+  font-size: 0.95rem;
 }
+
+.car-card .price-tag {
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-top: 12px;
+}
+
+.car-card-actions {
+  margin-top: 16px;
+}
+
+.btn-view-details {
+  display: block;
+  text-align: center;
+  background-color: #2563eb;
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.btn-view-details:hover {
+  background-color: #1d4ed8;
+}

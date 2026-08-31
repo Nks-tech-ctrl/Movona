@@ -1,10 +1,11 @@
 import { Routes, Route } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
 
+import CarDetailsPage from "../pages/CarDetailsPage";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
-import RegisterPage from "../pages/RegisterPage";
 import NotFoundPage from "../pages/NotFoundPage";
+import RegisterPage from "../pages/RegisterPage";
 
 function AppRoutes() {
   return (
@@ -17,7 +18,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<HomePage />} />
+      <Route
+        path="/cars/:id"
+        element={
+          <ProtectedRoute>
+            <CarDetailsPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="*" element={<NotFoundPage />} />
