@@ -10,27 +10,39 @@ function LoginPage() {
   const { loginUser } = useContext(AuthContext);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event) {
     event.preventDefault();
+    setError("");
+    setLoading(true);
 
     try {
       const response = await api.post("/auth/token/", {
-        username: username,
+        username: username.trim(),
         password: password,
       });
+
       localStorage.setItem("access_token", response.data.access);
       localStorage.setItem("refresh_token", response.data.refresh);
 
       loginUser({
-        username: username,
+        username: username.trim(),
       });
 
-      console.log("Login successful:", response.data);
-
       navigate("/");
-    } catch (error) {
-      console.error("Login failed:", error.response?.data);
+    } catch (err) {
+      console.error("Login failed:", err.response?.data);
+      if (err.response?.status === 401) {
+        setError("Invalid username or password.");
+      } else {
+        setError(
+          err.response?.data?.detail || "Login failed. Please try again."
+        );
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -38,6 +50,8 @@ function LoginPage() {
     <main className="auth-page">
       <div className="auth-card">
         <h1>Login to Movona</h1>
+
+        {error && <div className="form-error">{error}</div>}
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="form-group">
@@ -66,7 +80,9 @@ function LoginPage() {
             />
           </div>
 
-          <button type="submit">Login</button>
+          <button type="submit" disabled={loading}>
+            {loading ? "Signing in..." : "Login"}
+          </button>
         </form>
 
         <p className="auth-footer">
@@ -78,3 +94,4 @@ function LoginPage() {
 }
 
 export default LoginPage;
+

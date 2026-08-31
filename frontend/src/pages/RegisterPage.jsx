@@ -12,7 +12,9 @@ function RegisterPage() {
     password: "",
     password_confirm: "",
   });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -34,16 +36,35 @@ function RegisterPage() {
 
     try {
       setError("");
+      setLoading(true);
 
-      const response = await api.post("/auth/register/", formData);
+      await api.post("/auth/register/", formData);
 
-      console.log("Registration successful:", response.data);
       navigate("/login");
-    } catch (error) {
-      console.error("Registration failed:", error.response?.data);
-      setError("Registration failed. Please try again.");
+    } catch (err) {
+      console.error("Registration failed:", err.response?.data);
+      if (err.response?.data) {
+        const data = err.response.data;
+        if (data.detail) {
+          setError(data.detail);
+        } else if (typeof data === "object") {
+          const errorsList = [];
+          for (const key of Object.keys(data)) {
+            const val = Array.isArray(data[key]) ? data[key].join(", ") : data[key];
+            errorsList.push(`${key}: ${val}`);
+          }
+          setError(errorsList.join(" | "));
+        } else {
+          setError("Registration failed. Please verify your details.");
+        }
+      } else {
+        setError("Registration failed. Please check your network connection.");
+      }
+    } finally {
+      setLoading(false);
     }
   }
+
 
   return (
     <main className="auth-page">
@@ -121,8 +142,11 @@ function RegisterPage() {
             />
           </div>
           {error && <p className="form-error">{error}</p>}
-          <button type="submit">Create Account</button>
+          <button type="submit" disabled={loading}>
+            {loading ? "Creating Account..." : "Create Account"}
+          </button>
         </form>
+
 
         <p className="auth-footer">
           Already have an account? <Link to="/login">Login</Link>
