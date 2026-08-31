@@ -11,8 +11,10 @@ class CarAdmin(admin.ModelAdmin):
         "license_plate",
         "seats",
         "price_per_day",
+        "image_url",
         "is_available",
     )
+
 
     list_filter = (
         "is_available",

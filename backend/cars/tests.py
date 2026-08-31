@@ -1,5 +1,7 @@
+from django.test import TestCase
 from decimal import Decimal
 
+# Create your tests here.
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -16,6 +18,7 @@ class CarAPITests(APITestCase):
             color="White",
             seats=7,
             price_per_day=Decimal("4999.99"),
+            image_url="https://example.com/fortuner.jpg",
             is_available=True,
         )
         self.car2 = Car.objects.create(
@@ -33,6 +36,7 @@ class CarAPITests(APITestCase):
         response = self.client.get("/api/cars/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data[0]["image_url"], "https://example.com/fortuner.jpg")
 
     def test_get_car_detail_valid_id_returns_200(self):
         response = self.client.get(f"/api/cars/{self.car1.id}/")
@@ -42,8 +46,10 @@ class CarAPITests(APITestCase):
         self.assertEqual(response.data["model"], "Fortuner")
         self.assertEqual(response.data["year"], 2024)
         self.assertEqual(response.data["seats"], 7)
+        self.assertEqual(response.data["image_url"], "https://example.com/fortuner.jpg")
         self.assertEqual(Decimal(response.data["price_per_day"]), Decimal("4999.99"))
         self.assertTrue(response.data["is_available"])
+
 
     def test_get_car_detail_invalid_id_returns_404(self):
         response = self.client.get("/api/cars/999999/")

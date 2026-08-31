@@ -26,18 +26,50 @@ function HomePage() {
 
   if (loading) {
     return <p>Loading cars...</p>;
+    return (
+      <div className="home-container">
+        <div className="state-container">
+          <div className="spinner"></div>
+          <p>Loading available cars...</p>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
     return <p>{error}</p>;
+    return (
+      <div className="home-container">
+        <div className="state-container error-card">
+          <p>{error}</p>
+          <button onClick={() => window.location.reload()} className="btn-retry">
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div>
       <h1>Welcome to Movona</h1>
       <p>Your ride, your way.</p>
+    <div className="home-container">
+      <header className="hero-section">
+        <h1>Welcome to Movona</h1>
+        <p className="hero-subtitle">
+          Premium car rentals at your fingertips. Simple, fast, and transparent.
+        </p>
+      </header>
 
       <h2>Available Cars</h2>
+      <section className="fleet-section">
+        <div className="section-header">
+          <h2>Featured Fleet</h2>
+          <span className="car-count">
+            {cars.length} {cars.length === 1 ? "Vehicle" : "Vehicles"} Available
+          </span>
+        </div>
 
       {cars.length === 0 ? (
         <p>No cars available.</p>
@@ -48,6 +80,18 @@ function HomePage() {
         ))} 
        </div>
       )}
+        {cars.length === 0 ? (
+          <div className="state-container empty-card">
+            <p>No cars currently in fleet. Please check back later.</p>
+          </div>
+        ) : (
+          <div className="car-grid">
+            {cars.map((car) => (
+              <CarCard key={car.id} car={car} />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

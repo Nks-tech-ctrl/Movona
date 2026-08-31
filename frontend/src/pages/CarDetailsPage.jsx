@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/axios";
 import "./CarDetailsPage.css";
 
+const DEFAULT_CAR_IMG = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
+
 function CarDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -10,6 +12,7 @@ function CarDetailsPage() {
   const [car, setCar] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     async function fetchCarDetails() {
@@ -61,9 +64,27 @@ function CarDetailsPage() {
     );
   }
 
+  const displayImage = !imgError && car.image_url ? car.image_url : DEFAULT_CAR_IMG;
+
   return (
     <div className="car-details-container">
       <div className="car-details-card">
+        <div className="car-details-hero">
+          <img
+            src={displayImage}
+            alt={`${car.brand} ${car.model}`}
+            className="car-details-img"
+            onError={() => setImgError(true)}
+          />
+          <span
+            className={`status-pill-overlay ${
+              car.is_available ? "status-available" : "status-booked"
+            }`}
+          >
+            {car.is_available ? "Available for Rent" : "Currently Booked"}
+          </span>
+        </div>
+
         <div className="car-details-header">
           <div>
             <h1 className="car-title">
@@ -71,13 +92,6 @@ function CarDetailsPage() {
             </h1>
             <p className="car-subtitle">Model Year: {car.year}</p>
           </div>
-          <span
-            className={`status-pill ${
-              car.is_available ? "status-available" : "status-booked"
-            }`}
-          >
-            {car.is_available ? "Available for Rent" : "Currently Booked"}
-          </span>
         </div>
 
         <div className="car-info-grid">
