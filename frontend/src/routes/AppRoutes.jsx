@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
 
+import BookingPage from "../pages/BookingPage";
 import CarDetailsPage from "../pages/CarDetailsPage";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
@@ -26,11 +27,20 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/cars/:id/book"
+        element={
+          <ProtectedRoute>
+            <BookingPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
+
 
 export default AppRoutes;
