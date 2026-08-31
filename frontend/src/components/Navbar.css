@@ -32,6 +32,29 @@
   font-size: 1.5rem;
 }
 
+.driver-portal-tag {
+  font-size: 0.72rem;
+  background-color: #fef08a;
+  color: #854d0e;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 2px;
+}
+
+.role-pill {
+  font-size: 0.72rem;
+  background-color: #dbeafe;
+  color: #1e40af;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .mobile-menu-btn {
   display: none;
   background: none;
@@ -199,4 +222,4 @@
   .btn-nav-register {
     text-align: center;
   }
-}
+}

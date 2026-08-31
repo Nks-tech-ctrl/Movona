@@ -1,0 +1,293 @@
+.driver-rides-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 20px 60px 20px;
+}
+
+.driver-rides-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.driver-rides-header h1 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+}
+
+.subtitle {
+  color: #64748b;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.btn-back-dashboard {
+  background-color: #f1f5f9;
+  color: #334155;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 10px 18px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.btn-back-dashboard:hover {
+  background-color: #e2e8f0;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 12px;
+  overflow-x: auto;
+}
+
+.filter-tab {
+  background: none;
+  border: 1px solid transparent;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-tab:hover {
+  color: #0f172a;
+  background-color: #f8fafc;
+}
+
+.filter-tab.active {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.state-container {
+  text-align: center;
+  padding: 60px 20px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.empty-rides-card {
+  text-align: center;
+  padding: 60px 20px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+}
+
+.empty-icon {
+  font-size: 2.8rem;
+  margin-bottom: 12px;
+}
+
+.btn-find-rides {
+  display: inline-block;
+  background-color: #2563eb;
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.driver-rides-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.driver-ride-item-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  transition: border-color 0.2s ease;
+}
+
+.driver-ride-item-card:hover {
+  border-color: #cbd5e1;
+}
+
+.ride-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ride-id-tag {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #0f172a;
+  margin-right: 10px;
+}
+
+.ride-category-badge {
+  background-color: #f1f5f9;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.status-pill {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  text-transform: capitalize;
+}
+
+.status-accepted,
+.status-driver_arriving,
+.status-driver_arrived {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.status-started {
+  background-color: #fef08a;
+  color: #854d0e;
+}
+
+.status-completed {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.status-cancelled {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.ride-route-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background-color: #f8fafc;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.route-stop {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.marker {
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.marker.green {
+  color: #10b981;
+}
+
+.marker.red {
+  color: #ef4444;
+}
+
+.stop-title {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.stop-address {
+  margin: 2px 0 0 0;
+  font-size: 0.95rem;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.ride-meta-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 16px;
+}
+
+.fare-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.fare-label {
+  font-size: 0.78rem;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.fare-amount {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #16a34a;
+}
+
+.ride-trip-metrics {
+  display: flex;
+  gap: 16px;
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.btn-action-view {
+  background-color: #f1f5f9;
+  color: #1e293b;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-action-view:hover {
+  background-color: #e2e8f0;
+}
+
+.btn-active-flow {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.btn-active-flow:hover {
+  background-color: #1d4ed8;
+}
+
+@media (max-width: 640px) {
+  .ride-meta-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn-action-view {
+    text-align: center;
+  }
+}

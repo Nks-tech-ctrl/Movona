@@ -19,12 +19,19 @@ function Navbar() {
     setMobileMenuOpen(false);
   }
 
+  const isDriver = user?.is_driver;
+
   return (
     <header className="navbar-header">
       <div className="navbar-container">
-        <Link to="/" className="navbar-logo" onClick={closeMenu}>
+        <Link
+          to={isDriver ? "/driver/dashboard" : "/"}
+          className="navbar-logo"
+          onClick={closeMenu}
+        >
           <span className="logo-icon">🚗</span>
           <span className="logo-text">Movona</span>
+          {isDriver && <span className="driver-portal-tag">Driver</span>}
         </Link>
 
         <button
@@ -37,24 +44,80 @@ function Navbar() {
 
         <nav className={`navbar-nav ${mobileMenuOpen ? "nav-open" : ""}`}>
           <div className="nav-links">
-            <Link
-              to="/"
-              className={`nav-link ${location.pathname === "/" ? "active" : ""}`}
-              onClick={closeMenu}
-            >
-              Fleet
-            </Link>
+            {isDriver ? (
+              <>
+                <Link
+                  to="/driver/dashboard"
+                  className={`nav-link ${
+                    location.pathname === "/driver/dashboard" ? "active" : ""
+                  }`}
+                  onClick={closeMenu}
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  to="/driver/rides"
+                  className={`nav-link ${
+                    location.pathname.startsWith("/driver/rides")
+                      ? "active"
+                      : ""
+                  }`}
+                  onClick={closeMenu}
+                >
+                  My Rides
+                </Link>
+                <Link
+                  to="/driver/vehicles"
+                  className={`nav-link ${
+                    location.pathname === "/driver/vehicles" ? "active" : ""
+                  }`}
+                  onClick={closeMenu}
+                >
+                  Vehicles
+                </Link>
+                <Link
+                  to="/driver/profile"
+                  className={`nav-link ${
+                    location.pathname === "/driver/profile" ? "active" : ""
+                  }`}
+                  onClick={closeMenu}
+                >
+                  Profile
+                </Link>
+                <Link
+                  to="/"
+                  className={`nav-link ${
+                    location.pathname === "/" ? "active" : ""
+                  }`}
+                  onClick={closeMenu}
+                >
+                  Fleet
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/"
+                  className={`nav-link ${
+                    location.pathname === "/" ? "active" : ""
+                  }`}
+                  onClick={closeMenu}
+                >
+                  Fleet
+                </Link>
 
-            {user && (
-              <Link
-                to="/my-bookings"
-                className={`nav-link ${
-                  location.pathname === "/my-bookings" ? "active" : ""
-                }`}
-                onClick={closeMenu}
-              >
-                My Reservations
-              </Link>
+                {user && (
+                  <Link
+                    to="/my-bookings"
+                    className={`nav-link ${
+                      location.pathname === "/my-bookings" ? "active" : ""
+                    }`}
+                    onClick={closeMenu}
+                  >
+                    My Reservations
+                  </Link>
+                )}
+              </>
             )}
           </div>
 
@@ -62,8 +125,11 @@ function Navbar() {
             {user ? (
               <div className="user-menu">
                 <span className="user-badge">
-                  <span className="user-avatar">👤</span>
+                  <span className="user-avatar">
+                    {isDriver ? "🚕" : "👤"}
+                  </span>
                   <span className="user-name">{user.username}</span>
+                  {isDriver && <span className="role-pill">Driver</span>}
                 </span>
 
                 <button onClick={handleLogout} className="btn-logout">

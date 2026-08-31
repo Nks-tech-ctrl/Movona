@@ -27,11 +27,16 @@ function LoginPage() {
       localStorage.setItem("access_token", response.data.access);
       localStorage.setItem("refresh_token", response.data.refresh);
 
-      loginUser({
-        username: username.trim(),
-      });
+      // Fetch verified user profile
+      const userRes = await api.get("/auth/me/");
+      loginUser(userRes.data);
 
-      navigate("/");
+      if (userRes.data.is_driver) {
+        navigate("/driver/dashboard");
+      } else {
+        navigate("/");
+      }
+
     } catch (err) {
       console.error("Login failed:", err.response?.data);
       if (err.response?.status === 401) {
