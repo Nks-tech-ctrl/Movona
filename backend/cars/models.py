@@ -27,4 +27,3 @@ class Car(models.Model):
 
     def __str__(self):
         return f"{self.brand} {self.model} ({self.license_plate})"
-

@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/axios";
 import "./CarDetailsPage.css";
 
-const DEFAULT_CAR_IMG = "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
+const DEFAULT_CAR_IMG =
+  "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=1200&q=80";
 
 function CarDetailsPage() {
   const { id } = useParams();
@@ -64,7 +65,8 @@ function CarDetailsPage() {
     );
   }
 
-  const displayImage = !imgError && car.image_url ? car.image_url : DEFAULT_CAR_IMG;
+  const displayImage =
+    !imgError && car.image_url ? car.image_url : DEFAULT_CAR_IMG;
 
   return (
     <div className="car-details-container">

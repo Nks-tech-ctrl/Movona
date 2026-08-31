@@ -25,7 +25,6 @@ function HomePage() {
   }, []);
 
   if (loading) {
-    return <p>Loading cars...</p>;
     return (
       <div className="home-container">
         <div className="state-container">
@@ -37,12 +36,14 @@ function HomePage() {
   }
 
   if (error) {
-    return <p>{error}</p>;
     return (
       <div className="home-container">
         <div className="state-container error-card">
           <p>{error}</p>
-          <button onClick={() => window.location.reload()} className="btn-retry">
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-retry"
+          >
             Retry
           </button>
         </div>
@@ -51,9 +52,6 @@ function HomePage() {
   }
 
   return (
-    <div>
-      <h1>Welcome to Movona</h1>
-      <p>Your ride, your way.</p>
     <div className="home-container">
       <header className="hero-section">
         <h1>Welcome to Movona</h1>
@@ -62,7 +60,6 @@ function HomePage() {
         </p>
       </header>
 
-      <h2>Available Cars</h2>
       <section className="fleet-section">
         <div className="section-header">
           <h2>Featured Fleet</h2>
@@ -71,15 +68,6 @@ function HomePage() {
           </span>
         </div>
 
-      {cars.length === 0 ? (
-        <p>No cars available.</p>
-      ) : (
-       <div className="car-grid">
-        {cars.map((car)=>(
-          <CarCard key={car.id} car={car}/>
-        ))} 
-       </div>
-      )}
         {cars.length === 0 ? (
           <div className="state-container empty-card">
             <p>No cars currently in fleet. Please check back later.</p>

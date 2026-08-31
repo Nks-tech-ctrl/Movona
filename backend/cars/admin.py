@@ -15,7 +15,6 @@ class CarAdmin(admin.ModelAdmin):
         "is_available",
     )
 
-
     list_filter = (
         "is_available",
         "brand",
