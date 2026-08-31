@@ -6,9 +6,30 @@ from rest_framework_simplejwt.views import (
 )
 
 
+from cars.views import (
+    CarBookingCancelAPIView,
+    CarBookingDetailAPIView,
+    CarBookingListCreateAPIView,
+)
+
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/cars/",include("cars.urls")),
+    path("api/cars/", include("cars.urls")),
+    path(
+        "api/bookings/",
+        CarBookingListCreateAPIView.as_view(),
+        name="booking-list-create",
+    ),
+    path(
+        "api/bookings/<int:pk>/",
+        CarBookingDetailAPIView.as_view(),
+        name="booking-detail",
+    ),
+    path(
+        "api/bookings/<int:pk>/cancel/",
+        CarBookingCancelAPIView.as_view(),
+        name="booking-cancel",
+    ),
     path(
         "api/rides/",
         include("rides.urls"),
@@ -28,3 +49,4 @@ urlpatterns = [
         name="token-refresh",
     ),
 ]
+
