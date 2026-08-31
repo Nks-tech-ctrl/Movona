@@ -4,7 +4,7 @@ import api from "../api/axios";
 import "./AuthPage.css";
 
 function RegisterPage() {
-  const navigate =useNavigate();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -14,7 +14,6 @@ function RegisterPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -50,7 +49,9 @@ function RegisterPage() {
         } else if (typeof data === "object") {
           const errorsList = [];
           for (const key of Object.keys(data)) {
-            const val = Array.isArray(data[key]) ? data[key].join(", ") : data[key];
+            const val = Array.isArray(data[key])
+              ? data[key].join(", ")
+              : data[key];
             errorsList.push(`${key}: ${val}`);
           }
           setError(errorsList.join(" | "));
@@ -64,7 +65,6 @@ function RegisterPage() {
       setLoading(false);
     }
   }
-
 
   return (
     <main className="auth-page">
@@ -146,7 +146,6 @@ function RegisterPage() {
             {loading ? "Creating Account..." : "Create Account"}
           </button>
         </form>
-
 
         <p className="auth-footer">
           Already have an account? <Link to="/login">Login</Link>

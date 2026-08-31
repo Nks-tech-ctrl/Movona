@@ -27,4 +27,3 @@ urlpatterns = [
         name="car-booking-cancel",
     ),
 ]
-

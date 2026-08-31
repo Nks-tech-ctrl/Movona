@@ -7,6 +7,7 @@ Movona is a modern, modular, full-stack mobility platform built with **Django RE
 ## 🚀 Key Features
 
 ### 🚗 Vehicle Fleet & Car Rental
+
 - **Fleet Showcase**: Browse available vehicles with images, model year, seating capacity, color, and daily rates.
 - **Detailed Specifications**: Detailed vehicle profile with real-time availability badges and pricing.
 - **Secure Reservation Engine**:
@@ -18,6 +19,7 @@ Movona is a modern, modular, full-stack mobility platform built with **Django RE
   - Self-service booking cancellation with instant status updates.
 
 ### 🚕 On-Demand Ride Dispatch & Driver Lifecycle
+
 - **Custom User Architecture**: Multi-role system supporting Customers, Drivers, and Administrators.
 - **JWT Authentication**: Secure token-based auth with automatic token refresh interceptors.
 - **Ride Request & Estimation**: Haversine distance-based dynamic fare calculations.
@@ -35,14 +37,14 @@ Movona is a modern, modular, full-stack mobility platform built with **Django RE
 
 ## 🛠️ Technology Stack
 
-| Layer | Technologies |
-| :--- | :--- |
-| **Backend** | Python 3.12+, Django 6.0, Django REST Framework 3.16 |
-| **Auth & Security** | `djangorestframework-simplejwt`, Django PBKDF2 Password Hasher |
-| **Database** | SQLite (Production-ready relational schema) |
-| **Frontend** | React 19, Vite, React Router DOM 7, Axios |
-| **Styling** | Modern CSS with Responsive Flexbox/Grid, Mobile-Friendly UI |
-| **Testing** | Django `APITestCase`, Fast test hasher suite (165 tests in <5s) |
+| Layer               | Technologies                                                    |
+| :------------------ | :-------------------------------------------------------------- |
+| **Backend**         | Python 3.12+, Django 6.0, Django REST Framework 3.16            |
+| **Auth & Security** | `djangorestframework-simplejwt`, Django PBKDF2 Password Hasher  |
+| **Database**        | SQLite (Production-ready relational schema)                     |
+| **Frontend**        | React 19, Vite, React Router DOM 7, Axios                       |
+| **Styling**         | Modern CSS with Responsive Flexbox/Grid, Mobile-Friendly UI     |
+| **Testing**         | Django `APITestCase`, Fast test hasher suite (165 tests in <5s) |
 
 ---
 
@@ -73,6 +75,7 @@ Movona/
 ## ⚡ Quick Start & Installation
 
 ### Prerequisites
+
 - Python 3.10+
 - Node.js 18+ and npm
 
@@ -131,39 +134,42 @@ Frontend will be live at `http://localhost:5173/`.
 ## 📡 REST API Reference
 
 ### Authentication & Profiles
-| Method | Endpoint | Description | Auth Required |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/register/` | Register customer account | No |
-| `POST` | `/api/auth/token/` | Obtain JWT access and refresh pair | No |
-| `POST` | `/api/auth/token/refresh/` | Refresh expired access token | No |
-| `GET` | `/api/customers/me/` | Get current customer profile | Yes |
-| `GET` | `/api/drivers/me/` | Get current driver profile | Yes (Driver) |
+
+| Method | Endpoint                   | Description                        | Auth Required |
+| :----- | :------------------------- | :--------------------------------- | :------------ |
+| `POST` | `/api/auth/register/`      | Register customer account          | No            |
+| `POST` | `/api/auth/token/`         | Obtain JWT access and refresh pair | No            |
+| `POST` | `/api/auth/token/refresh/` | Refresh expired access token       | No            |
+| `GET`  | `/api/customers/me/`       | Get current customer profile       | Yes           |
+| `GET`  | `/api/drivers/me/`         | Get current driver profile         | Yes (Driver)  |
 
 ### Car Rental & Fleet
-| Method | Endpoint | Description | Auth Required |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/cars/` | List all vehicles in fleet | No |
-| `GET` | `/api/cars/<id>/` | Retrieve vehicle details | No |
-| `GET` | `/api/bookings/` | List authenticated user's reservations | Yes |
-| `POST` | `/api/bookings/` | Create a new car reservation | Yes |
-| `GET` | `/api/bookings/<id>/` | Retrieve specific reservation | Yes |
-| `POST` | `/api/bookings/<id>/cancel/` | Cancel reservation | Yes |
+
+| Method | Endpoint                     | Description                            | Auth Required |
+| :----- | :--------------------------- | :------------------------------------- | :------------ |
+| `GET`  | `/api/cars/`                 | List all vehicles in fleet             | No            |
+| `GET`  | `/api/cars/<id>/`            | Retrieve vehicle details               | No            |
+| `GET`  | `/api/bookings/`             | List authenticated user's reservations | Yes           |
+| `POST` | `/api/bookings/`             | Create a new car reservation           | Yes           |
+| `GET`  | `/api/bookings/<id>/`        | Retrieve specific reservation          | Yes           |
+| `POST` | `/api/bookings/<id>/cancel/` | Cancel reservation                     | Yes           |
 
 ### On-Demand Rides & Dispatch
-| Method | Endpoint | Description | Auth Required |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/rides/fare-estimate/` | Calculate distance and fare estimate | No |
-| `POST` | `/api/rides/book/` | Book on-demand ride | Yes |
-| `GET` | `/api/rides/` | List customer ride history | Yes |
-| `GET` | `/api/rides/<id>/` | Get ride details | Yes |
-| `POST` | `/api/rides/<id>/cancel/` | Cancel on-demand ride | Yes |
-| `GET` | `/api/rides/driver/available/` | Driver discovery for nearby rides | Yes (Driver) |
-| `POST` | `/api/rides/driver/<id>/accept/`| Accept ride | Yes (Driver) |
-| `POST` | `/api/rides/driver/<id>/arriving/`| Mark driver en-route | Yes (Driver) |
-| `POST` | `/api/rides/driver/<id>/arrived/` | Mark driver arrived | Yes (Driver) |
-| `POST` | `/api/rides/driver/<id>/start/` | Verify customer OTP & start ride | Yes (Driver) |
-| `POST` | `/api/rides/driver/<id>/complete/`| Complete ride | Yes (Driver) |
-| `POST` | `/api/rides/<id>/rate/` | Submit customer rating and review | Yes |
+
+| Method | Endpoint                           | Description                          | Auth Required |
+| :----- | :--------------------------------- | :----------------------------------- | :------------ |
+| `POST` | `/api/rides/fare-estimate/`        | Calculate distance and fare estimate | No            |
+| `POST` | `/api/rides/book/`                 | Book on-demand ride                  | Yes           |
+| `GET`  | `/api/rides/`                      | List customer ride history           | Yes           |
+| `GET`  | `/api/rides/<id>/`                 | Get ride details                     | Yes           |
+| `POST` | `/api/rides/<id>/cancel/`          | Cancel on-demand ride                | Yes           |
+| `GET`  | `/api/rides/driver/available/`     | Driver discovery for nearby rides    | Yes (Driver)  |
+| `POST` | `/api/rides/driver/<id>/accept/`   | Accept ride                          | Yes (Driver)  |
+| `POST` | `/api/rides/driver/<id>/arriving/` | Mark driver en-route                 | Yes (Driver)  |
+| `POST` | `/api/rides/driver/<id>/arrived/`  | Mark driver arrived                  | Yes (Driver)  |
+| `POST` | `/api/rides/driver/<id>/start/`    | Verify customer OTP & start ride     | Yes (Driver)  |
+| `POST` | `/api/rides/driver/<id>/complete/` | Complete ride                        | Yes (Driver)  |
+| `POST` | `/api/rides/<id>/rate/`            | Submit customer rating and review    | Yes           |
 
 ---
 
@@ -172,10 +178,12 @@ Frontend will be live at `http://localhost:5173/`.
 Movona includes a comprehensive automated test suite covering authentication, permissions, edge cases, date validation, and ownership isolation.
 
 To run the complete test suite:
+
 ```bash
 cd backend
 ..\venv\Scripts\python.exe manage.py test --settings=config.settings_test
 ```
+
 **Results**: `165 passed in ~4.5s`.
 
 ---

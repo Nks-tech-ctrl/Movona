@@ -65,4 +65,3 @@ class CarBooking(models.Model):
 
     def __str__(self):
         return f"Booking #{self.id} - {self.car.brand} {self.car.model} by {self.user.username}"
-

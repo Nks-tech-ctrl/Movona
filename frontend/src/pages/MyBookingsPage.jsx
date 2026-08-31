@@ -33,7 +33,7 @@ function MyBookingsPage() {
 
   async function handleCancel(bookingId) {
     const confirmCancel = window.confirm(
-      "Are you sure you want to cancel this reservation?"
+      "Are you sure you want to cancel this reservation?",
     );
     if (!confirmCancel) return;
 
@@ -44,13 +44,14 @@ function MyBookingsPage() {
 
       // Update booking in local state
       setBookings((prev) =>
-        prev.map((b) => (b.id === bookingId ? response.data : b))
+        prev.map((b) => (b.id === bookingId ? response.data : b)),
       );
       setActionMessage("Reservation cancelled successfully.");
     } catch (err) {
       console.error("Cancellation error:", err);
       alert(
-        err.response?.data?.detail || "Failed to cancel booking. Please try again."
+        err.response?.data?.detail ||
+          "Failed to cancel booking. Please try again.",
       );
     } finally {
       setCancellingId(null);
@@ -137,7 +138,8 @@ function MyBookingsPage() {
                           {car.brand} {car.model}
                         </h3>
                         <p className="booking-car-sub">
-                          {car.year} &bull; {car.color} &bull; {car.license_plate}
+                          {car.year} &bull; {car.color} &bull;{" "}
+                          {car.license_plate}
                         </p>
                       </div>
 
@@ -179,10 +181,7 @@ function MyBookingsPage() {
                   </div>
 
                   <div className="booking-actions">
-                    <Link
-                      to={`/cars/${car.id}`}
-                      className="btn-view-car"
-                    >
+                    <Link to={`/cars/${car.id}`} className="btn-view-car">
                       View Car
                     </Link>
                     {isCancellable && (

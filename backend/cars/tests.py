@@ -8,7 +8,6 @@ from accounts.models import User
 from .models import Car, CarBooking
 
 
-
 class CarAPITests(APITestCase):
     def setUp(self):
         self.car1 = Car.objects.create(
@@ -298,4 +297,3 @@ class CarBookingAPITests(APITestCase):
 
         response = self.client.post(f"/api/bookings/{booking_b.id}/cancel/")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-

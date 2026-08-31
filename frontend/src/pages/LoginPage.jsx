@@ -38,7 +38,7 @@ function LoginPage() {
         setError("Invalid username or password.");
       } else {
         setError(
-          err.response?.data?.detail || "Login failed. Please try again."
+          err.response?.data?.detail || "Login failed. Please try again.",
         );
       }
     } finally {
@@ -94,4 +94,3 @@ function LoginPage() {
 }
 
 export default LoginPage;
-

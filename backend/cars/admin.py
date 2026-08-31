@@ -3,7 +3,6 @@ from django.contrib import admin
 from .models import Car, CarBooking
 
 
-
 @admin.register(Car)
 class CarAdmin(admin.ModelAdmin):
     list_display = (
@@ -58,4 +57,3 @@ class CarBookingAdmin(admin.ModelAdmin):
         "dropoff_location",
     )
     readonly_fields = ("created_at", "updated_at")
-

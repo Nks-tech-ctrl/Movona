@@ -51,9 +51,12 @@ function BookingPage() {
   const start = new Date(pickupDate);
   const end = new Date(returnDate);
   const diffTime = end - start;
-  const rentalDays = diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
+  const rentalDays =
+    diffTime > 0 ? Math.ceil(diffTime / (1000 * 60 * 60 * 24)) : 0;
   const estimatedTotal =
-    car && rentalDays > 0 ? (rentalDays * parseFloat(car.price_per_day)).toFixed(2) : 0;
+    car && rentalDays > 0
+      ? (rentalDays * parseFloat(car.price_per_day)).toFixed(2)
+      : 0;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -89,7 +92,9 @@ function BookingPage() {
           setApiError(data.detail);
         } else if (typeof data === "object") {
           const firstKey = Object.keys(data)[0];
-          const msg = Array.isArray(data[firstKey]) ? data[firstKey][0] : data[firstKey];
+          const msg = Array.isArray(data[firstKey])
+            ? data[firstKey][0]
+            : data[firstKey];
           setApiError(`${firstKey}: ${msg}`);
         } else {
           setApiError("Failed to complete booking. Please check details.");
@@ -132,7 +137,8 @@ function BookingPage() {
         <div className="booking-card error-state">
           <h2>Car Currently Booked</h2>
           <p>
-            {car.brand} {car.model} is currently marked unavailable for new bookings.
+            {car.brand} {car.model} is currently marked unavailable for new
+            bookings.
           </p>
           <Link to="/" className="btn-back">
             &larr; Choose Another Car
@@ -161,7 +167,9 @@ function BookingPage() {
             </p>
             <div className="summary-rate">
               <span className="summary-rate-label">Daily Rental Rate</span>
-              <span className="summary-rate-value">₹{car.price_per_day} / day</span>
+              <span className="summary-rate-value">
+                ₹{car.price_per_day} / day
+              </span>
             </div>
 
             {rentalDays > 0 && (
@@ -174,7 +182,9 @@ function BookingPage() {
                 </div>
                 <div className="calc-row">
                   <span>Rate</span>
-                  <span>₹{car.price_per_day} &times; {rentalDays}</span>
+                  <span>
+                    ₹{car.price_per_day} &times; {rentalDays}
+                  </span>
                 </div>
                 <div className="calc-row total-row">
                   <span>Estimated Total</span>
@@ -257,7 +267,9 @@ function BookingPage() {
                 className="btn-confirm-booking"
                 disabled={submitting}
               >
-                {submitting ? "Confirming Reservation..." : "Confirm & Book Now"}
+                {submitting
+                  ? "Confirming Reservation..."
+                  : "Confirm & Book Now"}
               </button>
             </div>
           </form>
