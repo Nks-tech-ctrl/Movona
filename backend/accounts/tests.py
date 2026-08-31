@@ -956,3 +956,66 @@ class DriverVehicleAPITests(APITestCase):
         self.client.credentials()
         response = self.client.get("/api/drivers/vehicles/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class CurrentUserAPITests(APITestCase):
+    def setUp(self):
+        self.password = "SecureMePass123!"
+
+        self.customer_user = User.objects.create_user(
+            username="me_customer",
+            email="me_customer@test.com",
+            phone="9777700001",
+            password=self.password,
+            is_customer=True,
+            is_driver=False,
+        )
+        CustomerProfile.objects.create(user=self.customer_user)
+
+        self.driver_user = User.objects.create_user(
+            username="me_driver",
+            email="me_driver@test.com",
+            phone="9777700002",
+            password=self.password,
+            is_customer=False,
+            is_driver=True,
+        )
+        DriverProfile.objects.create(user=self.driver_user)
+
+    def test_get_current_user_as_customer_success(self):
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "me_customer", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {login_resp.data['access']}"
+        )
+
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["username"], "me_customer")
+        self.assertEqual(response.data["email"], "me_customer@test.com")
+        self.assertTrue(response.data["is_customer"])
+        self.assertFalse(response.data["is_driver"])
+
+    def test_get_current_user_as_driver_success(self):
+        login_resp = self.client.post(
+            "/api/auth/token/",
+            {"username": "me_driver", "password": self.password},
+            format="json",
+        )
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {login_resp.data['access']}"
+        )
+
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["username"], "me_driver")
+        self.assertEqual(response.data["email"], "me_driver@test.com")
+        self.assertFalse(response.data["is_customer"])
+        self.assertTrue(response.data["is_driver"])
+
+    def test_get_current_user_unauthenticated_returns_401(self):
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

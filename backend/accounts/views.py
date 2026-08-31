@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from .models import Vehicle, VehicleCategory
 from .permissions import IsDriver
 from .serializers import (
+    CurrentUserSerializer,
     CustomerProfileSerializer,
     CustomerRegisterSerializer,
     CustomerUserResponseSerializer,
@@ -18,7 +19,20 @@ from .serializers import (
 )
 
 
+class CurrentUserAPIView(APIView):
+    """
+    Authenticated endpoint to retrieve the current user's profile and roles.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = CurrentUserSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class CustomerRegisterAPIView(APIView):
+
     """
     Public registration endpoint for new customers.
     Creates a User and associated CustomerProfile.

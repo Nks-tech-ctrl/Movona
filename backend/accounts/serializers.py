@@ -11,7 +11,25 @@ from .models import (
 )
 
 
+class CurrentUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "phone",
+            "is_customer",
+            "is_driver",
+            "account_status",
+            "is_verified",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
 class CustomerRegisterSerializer(serializers.Serializer):
+
     username = serializers.CharField(max_length=150)
     email = serializers.EmailField(max_length=254)
     phone = serializers.CharField(max_length=15)

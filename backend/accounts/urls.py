@@ -12,6 +12,7 @@ from rides.views import (
     DriverStartRideAPIView,
 )
 from .views import (
+    CurrentUserAPIView,
     CustomerProfileAPIView,
     CustomerRegisterAPIView,
     DriverProfileAPIView,
@@ -26,6 +27,12 @@ urlpatterns = [
         CustomerRegisterAPIView.as_view(),
         name="customer-register",
     ),
+    path(
+        "auth/me/",
+        CurrentUserAPIView.as_view(),
+        name="auth-me",
+    ),
+
     path(
         "categories/",
         VehicleCategoryListAPIView.as_view(),
